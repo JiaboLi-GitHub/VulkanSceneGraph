@@ -15,12 +15,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// DrawMeshTasksIndirectCount类的默认构造函数
+// 创建带计数缓冲区的间接网格着色器绘制任务命令
+// 绘制次数从单独的计数缓冲区读取，支持动态调整绘制数量
 DrawMeshTasksIndirectCount::DrawMeshTasksIndirectCount() :
-    drawParameters(BufferInfo::create()),
-    drawCount(BufferInfo::create())
+    drawParameters(BufferInfo::create()),  // 绘制参数缓冲区
+    drawCount(BufferInfo::create())  // 绘制计数缓冲区
 {
 }
 
+// DrawMeshTasksIndirectCount类的构造函数
+// 从数据对象创建带计数缓冲区的间接绘制命令
+// in_drawParametersData: 包含绘制参数的数据对象
+// in_drawCountData: 包含绘制计数的数据对象
+// in_maxDrawCount: 最大绘制次数
+// in_stride: 绘制参数之间的步长（字节）
 DrawMeshTasksIndirectCount::DrawMeshTasksIndirectCount(ref_ptr<Data> in_drawParametersData, ref_ptr<Data> in_drawCountData, uint32_t in_maxDrawCount, uint32_t in_stride) :
     drawParameters(BufferInfo::create(in_drawParametersData)),
     drawCount(BufferInfo::create(in_drawCountData)),
@@ -29,8 +38,11 @@ DrawMeshTasksIndirectCount::DrawMeshTasksIndirectCount(ref_ptr<Data> in_drawPara
 {
 }
 
+// 从输入流读取DrawMeshTasksIndirectCount对象
+// 读取绘制参数缓冲区、计数缓冲区和相关参数
 void DrawMeshTasksIndirectCount::read(Input& input)
 {
+    // 读取绘制参数缓冲区
     input.readObject("drawParameters.data", drawParameters->data);
     if (!drawParameters->data)
     {
@@ -39,6 +51,7 @@ void DrawMeshTasksIndirectCount::read(Input& input)
         input.readValue<uint32_t>("drawParameters.range", drawParameters->range);
     }
 
+    // 读取绘制计数缓冲区
     input.readObject("drawCount.data", drawCount->data);
     if (!drawCount->data)
     {
@@ -47,12 +60,16 @@ void DrawMeshTasksIndirectCount::read(Input& input)
         input.readValue<uint32_t>("drawCount.range", drawCount->range);
     }
 
+    // 读取最大绘制次数和步长
     input.read("maxDrawCount", maxDrawCount);
     input.read("stride", stride);
 }
 
+// 将DrawMeshTasksIndirectCount对象写入输出流
+// 写入绘制参数缓冲区、计数缓冲区和相关参数
 void DrawMeshTasksIndirectCount::write(Output& output) const
 {
+    // 写入绘制参数缓冲区
     output.writeObject("drawParameters.data", drawParameters->data);
     if (!drawParameters->data)
     {
@@ -61,6 +78,7 @@ void DrawMeshTasksIndirectCount::write(Output& output) const
         output.writeValue<uint32_t>("drawParameters.range", drawParameters->range);
     }
 
+    // 写入绘制计数缓冲区
     output.writeObject("drawCount.data", drawCount->data);
     if (!drawCount->data)
     {
@@ -69,21 +87,30 @@ void DrawMeshTasksIndirectCount::write(Output& output) const
         output.writeValue<uint32_t>("drawCount.range", drawCount->range);
     }
 
+    // 写入最大绘制次数和步长
     output.write("maxDrawCount", maxDrawCount);
     output.write("stride", stride);
 }
 
+// 编译带计数缓冲区的间接绘制命令
+// 如果数据对象存在但缓冲区不存在，创建缓冲区并传输数据
+// context: 编译上下文
 void DrawMeshTasksIndirectCount::compile(Context& context)
 {
     if ((!drawParameters->buffer && drawParameters->data) || (!drawCount->buffer && drawCount->data))
     {
+        // 创建间接缓冲区并传输数据
         createBufferAndTransferData(context, {drawParameters, drawCount}, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE);
     }
 }
 
+// 记录带计数缓冲区的间接绘制命令到命令缓冲区
+// 调用Vulkan扩展函数执行带计数缓冲区的间接网格着色器绘制任务
+// commandBuffer: 目标命令缓冲区
 void DrawMeshTasksIndirectCount::record(vsg::CommandBuffer& commandBuffer) const
 {
     Device* device = commandBuffer.getDevice();
     auto extensions = device->getExtensions();
+    // 调用Vulkan扩展函数执行带计数缓冲区的间接网格着色器绘制任务
     extensions->vkCmdDrawMeshTasksIndirectCountEXT(commandBuffer, drawParameters->buffer->vk(commandBuffer.deviceID), drawParameters->offset, drawCount->buffer->vk(commandBuffer.deviceID), drawCount->offset, maxDrawCount, stride);
 }

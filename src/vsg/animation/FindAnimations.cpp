@@ -17,16 +17,25 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 应用访问者到Object对象
+// 遍历对象树，查找所有动画和动画组
+// object: 要遍历的对象
 void FindAnimations::apply(Object& object)
 {
     object.traverse(*this);
 }
 
+// 应用访问者到Animation对象
+// 将找到的动画添加到动画列表
+// animation: 找到的动画对象
 void FindAnimations::apply(Animation& animation)
 {
     animations.emplace_back(&animation);
 }
 
+// 应用访问者到AnimationGroup对象
+// 将找到的动画组添加到动画组列表，并继续遍历
+// node: 找到的动画组节点
 void FindAnimations::apply(AnimationGroup& node)
 {
     animationGroups.emplace_back(&node);

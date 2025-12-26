@@ -15,6 +15,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 将UNORM格式转换为sRGB格式
+// 将无符号归一化格式（UNORM）的Vulkan格式转换为sRGB格式
+// format: 输入的UNORM格式
+// 返回值：对应的sRGB格式，如果不支持转换则返回原格式
 VkFormat vsg::uNorm_to_sRGB(VkFormat format)
 {
     switch (format)
@@ -157,6 +161,10 @@ VkFormat vsg::uNorm_to_sRGB(VkFormat format)
     return format;
 }
 
+// 将sRGB格式转换为UNORM格式
+// 将sRGB格式的Vulkan格式转换为无符号归一化格式（UNORM）
+// format: 输入的sRGB格式
+// 返回值：对应的UNORM格式，如果不支持转换则返回原格式
 VkFormat vsg::sRGB_to_uNorm(VkFormat format)
 {
     switch (format)

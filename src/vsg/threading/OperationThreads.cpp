@@ -14,13 +14,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// OperationThreads类的构造函数
+// 创建操作线程池，用于并行执行操作
+// numThreads: 线程数量
+// in_status: 活动状态对象，用于控制线程的生命周期
 OperationThreads::OperationThreads(uint32_t numThreads, ref_ptr<ActivityStatus> in_status) :
     status(in_status)
 {
+    // 如果没有提供状态对象，创建一个新的
     if (!status) status = ActivityStatus::create();
+    // 创建操作队列
     queue = OperationQueue::create(status);
 
+    // 定义线程运行函数：从队列中取出操作并执行
     auto runThread = [](ref_ptr<OperationQueue> q, ref_ptr<ActivityStatus> thread_status) {
+        // 只要线程状态为活动，就持续从队列中取出操作并执行
         while (thread_status->active())
         {
             ref_ptr<Operation> operation = q->take_when_available();
@@ -31,17 +39,22 @@ OperationThreads::OperationThreads(uint32_t numThreads, ref_ptr<ActivityStatus> 
         }
     };
 
+    // 创建指定数量的工作线程
     for (size_t i = 0; i < numThreads; ++i)
     {
         threads.emplace_back(runThread, queue, status);
     }
 }
 
+// OperationThreads类的析构函数
+// 停止所有线程
 OperationThreads::~OperationThreads()
 {
     stop();
 }
 
+// 在当前线程中运行操作
+// 从队列中取出操作并在当前线程中执行（用于单线程模式）
 void OperationThreads::run()
 {
     while (ref_ptr<Operation> operation = queue->take())
@@ -50,14 +63,19 @@ void OperationThreads::run()
     }
 }
 
+// 停止所有操作线程
+// 设置状态为非活动，并等待所有线程结束
 void OperationThreads::stop()
 {
+    // 设置状态为非活动，通知所有线程停止
     status->set(false);
 
+    // 等待所有线程结束
     for (auto& thread : threads)
     {
         thread.join();
     }
 
+    // 清空线程列表
     threads.clear();
 }

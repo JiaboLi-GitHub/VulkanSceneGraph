@@ -21,6 +21,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 获取Allocator单例实例
+// 使用IntrusiveAllocator作为默认分配器
 std::unique_ptr<Allocator>& Allocator::instance()
 {
     static std::unique_ptr<Allocator> s_allocator(new IntrusiveAllocator());
@@ -29,13 +31,18 @@ std::unique_ptr<Allocator>& Allocator::instance()
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// vsg::allocate and vsg::deallocate convenience functions that map to using the OriginalBlockAllocator singleton.
+// vsg::allocate和vsg::deallocate便利函数，映射到使用Allocator单例
 //
+
+// 分配内存
+// 使用Allocator单例分配指定大小和亲和性的内存
 void* vsg::allocate(std::size_t size, AllocatorAffinity allocatorAffinity)
 {
     return Allocator::instance()->allocate(size, allocatorAffinity);
 }
 
+// 释放内存
+// 使用Allocator单例释放指定大小的内存
 void vsg::deallocate(void* ptr, std::size_t size)
 {
     Allocator::instance()->deallocate(ptr, size);

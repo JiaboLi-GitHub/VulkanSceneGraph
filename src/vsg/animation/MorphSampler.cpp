@@ -20,36 +20,45 @@ using namespace vsg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// MorphKeyframes
+// MorphKeyframes - 形变动画关键帧
 //
+
+// MorphKeyframes类的默认构造函数
+// 创建形变关键帧对象，用于存储形变动画的关键帧数据
 MorphKeyframes::MorphKeyframes()
 {
 }
 
+// 从输入流读取MorphKeyframes对象
+// 读取形变关键帧的名称和关键帧数据
 void MorphKeyframes::read(Input& input)
 {
     Object::read(input);
 
+    // 读取名称
     input.read("name", name);
 
-    // read key frames
+    // 读取关键帧数据
     uint32_t num_keyframes = input.readValue<uint32_t>("keyframes");
     keyframes.resize(num_keyframes);
     for (auto& keyframe : keyframes)
     {
-        input.read("time", keyframe.time);
-        input.readValues("values", keyframe.values);
-        input.readValues("weights", keyframe.weights);
+        input.read("time", keyframe.time);  // 关键帧时间
+        input.readValues("values", keyframe.values);  // 形变值数组
+        input.readValues("weights", keyframe.weights);  // 形变权重数组
     }
 }
 
+// 将MorphKeyframes对象写入输出流
+// 写入形变关键帧的名称和关键帧数据
 void MorphKeyframes::write(Output& output) const
 {
     Object::write(output);
 
+    // 写入名称
     output.write("name", name);
 
-    // write key frames
+    // 写入关键帧数据
     output.writeValue<uint32_t>("keyFrames", keyframes.size());
     for (auto& keyframe : keyframes)
     {
@@ -61,35 +70,53 @@ void MorphKeyframes::write(Output& output) const
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// MorphSampler
+// MorphSampler - 形变采样器，用于形变动画
 //
+
+// MorphSampler类的默认构造函数
+// 创建形变采样器，用于在特定时间点采样形变动画关键帧
 MorphSampler::MorphSampler()
 {
 }
 
+// MorphSampler类的拷贝构造函数
+// 使用CopyOp参数来支持深度拷贝操作
+// rhs: 要拷贝的源对象
+// copyop: 拷贝操作选项
 MorphSampler::MorphSampler(const MorphSampler& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
-    keyframes(copyop(rhs.keyframes)),
-    object(copyop(rhs.object))
+    keyframes(copyop(rhs.keyframes)),  // 形变关键帧
+    object(copyop(rhs.object))  // 要形变的对象
 {
 }
 
+// 比较两个MorphSampler对象
+// 首先比较基类，然后比较关键帧和对象
+// 返回值：0表示相等，-1表示当前对象小于rhs，1表示当前对象大于rhs
 int MorphSampler::compare(const Object& rhs_object) const
 {
     int result = AnimationSampler::compare(rhs_object);
     if (result != 0) return result;
 
     const auto& rhs = static_cast<decltype(*this)>(rhs_object);
+    // 比较关键帧
     if ((result = compare_pointer(keyframes, rhs.keyframes)) != 0) return result;
+    // 比较对象
     return compare_pointer(object, rhs.object);
 }
 
+// 更新形变采样器
+// 注意：此功能尚未实现
+// time: 动画时间
 void MorphSampler::update(double /*time*/)
 {
     // TODO write implementation of passing morph values to associated scene graph data structures
     vsg::warn("MorphSampler::update(double time) not implemented yet");
 }
 
+// 计算最大时间
+// 返回形变关键帧的最大时间
+// 返回值：最大时间，如果没有关键帧则返回0
 double MorphSampler::maxTime() const
 {
     double maxTime = 0.0;
@@ -100,6 +127,8 @@ double MorphSampler::maxTime() const
     return maxTime;
 }
 
+// 从输入流读取MorphSampler对象
+// 读取形变关键帧和对象
 void MorphSampler::read(Input& input)
 {
     AnimationSampler::read(input);
@@ -107,6 +136,8 @@ void MorphSampler::read(Input& input)
     input.read("object", object);
 }
 
+// 将MorphSampler对象写入输出流
+// 写入形变关键帧和对象
 void MorphSampler::write(Output& output) const
 {
     AnimationSampler::write(output);

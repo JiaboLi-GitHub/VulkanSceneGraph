@@ -14,20 +14,30 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// AmbientLight类的默认构造函数
+// 创建环境光源，提供均匀的环境照明，没有方向性
 AmbientLight::AmbientLight()
 {
 }
 
+// AmbientLight类的拷贝构造函数
+// 使用CopyOp参数来支持深度拷贝操作
+// rhs: 要拷贝的源对象
+// copyop: 拷贝操作选项
 AmbientLight::AmbientLight(const AmbientLight& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop)
 {
 }
 
+// 从输入流读取AmbientLight对象
+// 读取环境光源的属性（继承自Light基类）
 void AmbientLight::read(Input& input)
 {
     Light::read(input);
 }
 
+// 将AmbientLight对象写入输出流
+// 写入环境光源的属性（继承自Light基类）
 void AmbientLight::write(Output& output) const
 {
     Light::write(output);

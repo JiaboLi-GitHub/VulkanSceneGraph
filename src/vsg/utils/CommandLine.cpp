@@ -14,12 +14,20 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// CommandLine类的构造函数
+// 创建命令行参数解析器，用于解析命令行参数
+// argc: 命令行参数数量（指针，可能被修改）
+// argv: 命令行参数数组
 CommandLine::CommandLine(int* argc, char** argv) :
-    _argc(argc),
-    _argv(argv)
+    _argc(argc),  // 参数数量指针
+    _argv(argv)  // 参数数组
 {
 }
 
+// 读取命令行选项
+// 从命令行参数中读取选项并应用到Options对象
+// options: 选项对象，用于存储解析后的选项
+// 返回值：true表示成功读取，false表示失败
 bool CommandLine::read(Options* options)
 {
     return (options != nullptr) && options->readOptions(*this);

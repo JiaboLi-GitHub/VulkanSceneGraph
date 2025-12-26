@@ -15,6 +15,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 extern "C"
 {
 
+    // 获取VSG版本信息
+    // 返回包含主版本号、次版本号、补丁版本号和共享库版本号的结构体
     VsgVersion vsgGetVersion()
     {
         VsgVersion version{};
@@ -25,16 +27,22 @@ extern "C"
         return version;
     }
 
+    // 获取VSG版本字符串
+    // 返回版本号字符串，格式为"major.minor.patch"
     const char* vsgGetVersionString()
     {
         return VSG_VERSION_STRING;
     }
 
+    // 获取VSG共享库版本字符串
+    // 返回共享库版本号字符串
     const char* vsgGetSOVersionString()
     {
         return VSG_SOVERSION_STRING;
     }
 
+    // 检查VSG是否构建为共享库
+    // 返回值：1表示是共享库，0表示是静态库
     int vsgBuiltAsSharedLibrary()
     {
 #ifdef vsg_EXPORTS

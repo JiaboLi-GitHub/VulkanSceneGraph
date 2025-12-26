@@ -15,24 +15,33 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// Node类的默认构造函数
+// Node是场景图中所有节点的基类
 Node::Node()
 {
 }
 
+// Node类的拷贝构造函数
+// 使用CopyOp参数来支持深度拷贝操作
 Node::Node(const Node& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop)
 {
 }
 
+// Node类的析构函数
 Node::~Node()
 {
 }
 
+// 重载new运算符
+// 使用VSG的自定义内存分配器，指定节点类型的亲和性
 void* Node::operator new(std::size_t count)
 {
     return vsg::allocate(count, vsg::ALLOCATOR_AFFINITY_NODES);
 }
 
+// 重载delete运算符
+// 使用VSG的自定义内存释放器
 void Node::operator delete(void* ptr)
 {
     vsg::deallocate(ptr);

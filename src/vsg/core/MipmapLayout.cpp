@@ -16,29 +16,41 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// MipmapLayout类的默认构造函数
+// 创建空的Mipmap布局对象
 MipmapLayout::MipmapLayout()
 {
 }
 
+// MipmapLayout类的构造函数
+// 创建包含指定数量Mipmap级别的布局对象
+// size: Mipmap级别的数量
 MipmapLayout::MipmapLayout(std::size_t size) :
     mipmaps(size)
 {
 }
 
+// MipmapLayout类的析构函数
 MipmapLayout::~MipmapLayout()
 {
 }
 
+// 从输入流读取MipmapLayout对象
+// 读取Mipmap级别信息
 void MipmapLayout::read(Input& input)
 {
     Object::read(input);
 
+    // 读取Mipmap级别数组
     input.readValues("mipmaps", mipmaps);
 }
 
+// 将MipmapLayout对象写入输出流
+// 写入Mipmap级别信息
 void MipmapLayout::write(Output& output) const
 {
     Object::write(output);
 
+    // 写入Mipmap级别数组
     output.writeValues("mipmaps", mipmaps);
 }

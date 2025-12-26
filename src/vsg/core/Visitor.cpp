@@ -14,10 +14,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// Visitor类的默认构造函数
+// 访问者模式的基础类，用于遍历场景图
 Visitor::Visitor()
 {
 }
 
+// 访问Object对象的默认实现
+// 子类可以重写此方法来实现特定的访问逻辑
 void Visitor::apply(Object&)
 {
 }

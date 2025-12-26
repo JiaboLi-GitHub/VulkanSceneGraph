@@ -17,13 +17,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #    include <process.h>
 #    include <windows.h>
 
+// Windows平台设置线程CPU亲和性
+// tid: 线程句柄
+// affinity: CPU亲和性设置
 static void win32_setAffinity(HANDLE tid, const vsg::Affinity& affinity)
 {
+    // 获取CPU核心数量
     uint32_t numProcessors = std::thread::hardware_concurrency();
 
     DWORD_PTR affinityMask = 0x0;
     if (affinity)
     {
+        // 如果指定了亲和性，设置指定的CPU核心
         for (auto cpu : affinity.cpus)
         {
             if (cpu < numProcessors)
@@ -34,21 +39,27 @@ static void win32_setAffinity(HANDLE tid, const vsg::Affinity& affinity)
     }
     else
     {
-        // set affinity to all CPU cores
+        // 如果没有指定亲和性，设置所有CPU核心
         for (uint32_t cpu = 0; cpu < numProcessors; ++cpu)
         {
             affinityMask |= (0x1LL << cpu);
         }
     }
 
+    // 设置线程CPU亲和性掩码
     /*DWORD_PTR res =*/SetThreadAffinityMask(tid, affinityMask);
 }
 
+// 设置线程的CPU亲和性（Windows平台）
+// thread: 要设置的线程
+// affinity: CPU亲和性设置
 void vsg::setAffinity(std::thread& thread, const Affinity& affinity)
 {
     win32_setAffinity((HANDLE)thread.native_handle(), affinity);
 }
 
+// 设置当前线程的CPU亲和性（Windows平台）
+// affinity: CPU亲和性设置
 void vsg::setAffinity(const Affinity& affinity)
 {
     win32_setAffinity(GetCurrentThread(), affinity);
@@ -59,13 +70,18 @@ void vsg::setAffinity(const Affinity& affinity)
 #    include <mach/mach.h>
 #    include <pthread.h>
 
+// macOS平台设置线程CPU亲和性
+// thread_native_handle: 线程原生句柄
+// affinity: CPU亲和性设置
 static void macos_setAffinity(pthread_t thread_native_handle, const vsg::Affinity& affinity)
 {
+    // 获取CPU核心数量
     uint32_t numProcessors = std::thread::hardware_concurrency();
 
     integer_t cpuset = 0;
     if (affinity)
     {
+        // 如果指定了亲和性，设置指定的CPU核心
         for (auto cpu : affinity.cpus)
         {
             if (cpu < numProcessors)
@@ -76,23 +92,29 @@ static void macos_setAffinity(pthread_t thread_native_handle, const vsg::Affinit
     }
     else
     {
-        // set affinity to all CPU cores
+        // 如果没有指定亲和性，设置所有CPU核心
         for (uint32_t cpu = 0; cpu < numProcessors; ++cpu)
         {
             cpuset |= (0x1 << cpu);
         }
     }
 
+    // 设置线程CPU亲和性策略
     auto mach_thread = pthread_mach_thread_np(thread_native_handle);
     thread_affinity_policy_data_t policy = {cpuset};
     thread_policy_set(mach_thread, THREAD_AFFINITY_POLICY, (thread_policy_t)&policy, 1);
 }
 
+// 设置线程的CPU亲和性（macOS平台）
+// thread: 要设置的线程
+// affinity: CPU亲和性设置
 void vsg::setAffinity(std::thread& thread, const Affinity& affinity)
 {
     macos_setAffinity(thread.native_handle(), affinity);
 }
 
+// 设置当前线程的CPU亲和性（macOS平台）
+// affinity: CPU亲和性设置
 void vsg::setAffinity(const Affinity& affinity)
 {
     macos_setAffinity(pthread_self(), affinity);
@@ -100,27 +122,35 @@ void vsg::setAffinity(const Affinity& affinity)
 
 #elif defined(__ANDROID__) || defined(__CYGWIN__)
 
+// Android和Cygwin平台：设置线程CPU亲和性（未实现）
+// 这些平台目前不支持CPU亲和性设置
 void vsg::setAffinity(std::thread&, const Affinity&)
 {
     // Not currently implemented
 }
 
+// Android和Cygwin平台：设置当前线程CPU亲和性（未实现）
 void vsg::setAffinity(const Affinity&)
 {
     // Not currently implemented
 }
 
-#else // unices
+#else // unices (Linux等Unix系统)
 
+// Unix系统设置线程CPU亲和性
+// thread_native_handle: 线程原生句柄
+// affinity: CPU亲和性设置
 static void pthread_setAffinity(pthread_t thread_native_handle, const vsg::Affinity& affinity)
 {
+    // 获取CPU核心数量
     uint32_t numProcessors = std::thread::hardware_concurrency();
 
     cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
+    CPU_ZERO(&cpuset);  // 初始化CPU集合为空
 
     if (affinity)
     {
+        // 如果指定了亲和性，设置指定的CPU核心
         for (auto cpu : affinity.cpus)
         {
             if (cpu < numProcessors)
@@ -131,21 +161,27 @@ static void pthread_setAffinity(pthread_t thread_native_handle, const vsg::Affin
     }
     else
     {
-        // set affinity to all CPU cores
+        // 如果没有指定亲和性，设置所有CPU核心
         for (uint32_t cpu = 0; cpu < numProcessors; ++cpu)
         {
             CPU_SET(cpu, &cpuset);
         }
     }
 
+    // 设置线程CPU亲和性
     /*int rc =*/pthread_setaffinity_np(thread_native_handle, sizeof(cpu_set_t), &cpuset);
 }
 
+// 设置线程的CPU亲和性（Unix平台）
+// thread: 要设置的线程
+// affinity: CPU亲和性设置
 void vsg::setAffinity(std::thread& thread, const Affinity& affinity)
 {
     pthread_setAffinity(thread.native_handle(), affinity);
 }
 
+// 设置当前线程的CPU亲和性（Unix平台）
+// affinity: CPU亲和性设置
 void vsg::setAffinity(const Affinity& affinity)
 {
     pthread_setAffinity(pthread_self(), affinity);

@@ -17,16 +17,19 @@ using namespace vsg;
 
 namespace
 {
+    // StandardLayoutComputeBounds访问者
+    // 用于计算标准布局的文本边界，遍历文本并计算最小和最大位置
     struct StandardLayoutComputeBounds : public ConstVisitor
     {
-        const StandardLayout& layout;
-        const Font& font;
+        const StandardLayout& layout;  // 标准布局对象
+        const Font& font;  // 字体对象
 
-        vec2 row_position;
-        vec2 pen_position;
-        vec2 min_pos;
-        vec2 max_pos;
+        vec2 row_position;  // 当前行的位置
+        vec2 pen_position;  // 当前笔的位置（字形绘制位置）
+        vec2 min_pos;  // 最小位置（边界框左下角）
+        vec2 max_pos;  // 最大位置（边界框右上角）
 
+        // 构造函数
         StandardLayoutComputeBounds(const StandardLayout& in_layout, const Font& in_font) :
             layout(in_layout),
             font(in_font)
@@ -201,41 +204,57 @@ namespace
     };
 } // namespace
 
+// 从输入流读取StandardLayout对象
+// 读取布局的对齐方式、位置、方向、颜色和轮廓信息
 void StandardLayout::read(Input& input)
 {
     TextLayout::read(input);
 
-    input.readValue<uint32_t>("horizontalAlignment", horizontalAlignment);
-    input.readValue<uint32_t>("verticalAlignment", verticalAlignment);
-    input.readValue<uint32_t>("glyphLayout", glyphLayout);
-    input.read("position", position);
-    input.read("horizontal", horizontal);
-    input.read("vertical", vertical);
-    input.read("color", color);
-    input.read("outlineColor", outlineColor);
-    input.read("outlineWidth", outlineWidth);
+    // 读取对齐方式
+    input.readValue<uint32_t>("horizontalAlignment", horizontalAlignment);  // 水平对齐
+    input.readValue<uint32_t>("verticalAlignment", verticalAlignment);  // 垂直对齐
+    input.readValue<uint32_t>("glyphLayout", glyphLayout);  // 字形布局方向
 
+    // 读取位置和方向向量
+    input.read("position", position);  // 文本位置
+    input.read("horizontal", horizontal);  // 水平方向向量
+    input.read("vertical", vertical);  // 垂直方向向量
+
+    // 读取颜色和轮廓信息
+    input.read("color", color);  // 文本颜色
+    input.read("outlineColor", outlineColor);  // 轮廓颜色
+    input.read("outlineWidth", outlineWidth);  // 轮廓宽度
+
+    // 版本0.5.5及以上：读取广告牌相关属性
     if (input.version_greater_equal(0, 5, 5))
     {
-        input.read("billboard", billboard);
-        input.read("billboardAutoScaleDistance", billboardAutoScaleDistance);
+        input.read("billboard", billboard);  // 是否启用广告牌
+        input.read("billboardAutoScaleDistance", billboardAutoScaleDistance);  // 广告牌自动缩放距离
     }
 }
 
+// 将StandardLayout对象写入输出流
+// 写入布局的对齐方式、位置、方向、颜色和轮廓信息
 void StandardLayout::write(Output& output) const
 {
     TextLayout::write(output);
 
+    // 写入对齐方式
     output.writeValue<uint32_t>("horizontalAlignment", horizontalAlignment);
     output.writeValue<uint32_t>("verticalAlignment", verticalAlignment);
     output.writeValue<uint32_t>("glyphLayout", glyphLayout);
+
+    // 写入位置和方向向量
     output.write("position", position);
     output.write("horizontal", horizontal);
     output.write("vertical", vertical);
+
+    // 写入颜色和轮廓信息
     output.write("color", color);
     output.write("outlineColor", outlineColor);
     output.write("outlineWidth", outlineWidth);
 
+    // 版本0.5.5及以上：写入广告牌相关属性
     if (output.version_greater_equal(0, 5, 5))
     {
         output.write("billboard", billboard);
@@ -243,27 +262,37 @@ void StandardLayout::write(Output& output) const
     }
 }
 
+// 布局文本
+// 将文本数据转换为文本四边形，根据布局设置进行排列
+// text: 文本数据
+// font: 字体对象
+// quads: 输出的文本四边形列表
 void StandardLayout::layout(const Data* text, const Font& font, TextQuads& quads)
 {
+    // Convert访问者类
+    // 用于将文本数据转换为文本四边形
     struct Convert : public ConstVisitor
     {
-        const StandardLayout& layout;
-        const Font& font;
-        TextQuads& textQuads;
-        size_t start_of_conversion;
-        size_t start_of_row;
+        const StandardLayout& layout;  // 标准布局对象
+        const Font& font;  // 字体对象
+        TextQuads& textQuads;  // 文本四边形列表
+        size_t start_of_conversion;  // 转换开始位置
+        size_t start_of_row;  // 当前行开始位置
 
-        vec3 row_position;
-        vec3 pen_position;
-        vec3 normal;
+        vec3 row_position;  // 当前行的位置
+        vec3 pen_position;  // 当前笔的位置（字形绘制位置）
+        vec3 normal;  // 法向量（水平方向和垂直方向的叉积）
 
+        // 构造函数
         Convert(const StandardLayout& in_layout, const Font& in_font, TextQuads& in_textQuads) :
             layout(in_layout),
             font(in_font),
             textQuads(in_textQuads)
         {
+            // 初始化位置
             row_position.set(0.0f, 0.0f, 0.0f);
             pen_position = row_position;
+            // 计算法向量（用于光照计算）
             normal = normalize(cross(layout.horizontal, layout.vertical));
             start_of_conversion = textQuads.size();
             start_of_row = textQuads.size();
@@ -583,10 +612,17 @@ void StandardLayout::layout(const Data* text, const Font& font, TextQuads& quads
     converter.finalize();
 }
 
+// 计算对齐偏移
+// 根据水平和垂直对齐方式计算文本的对齐偏移量
+// text: 文本数据
+// font: 字体对象
+// 返回值：对齐偏移量（x为水平偏移，y为垂直偏移）
 vec2 StandardLayout::alignment(const Data* text, const Font& font) const
 {
+    // 如果对齐方式不是基线对齐，需要计算偏移
     if (horizontalAlignment != BASELINE_ALIGNMENT || verticalAlignment != BASELINE_ALIGNMENT)
     {
+        // 计算文本边界
         StandardLayoutComputeBounds computeBounds(*this, font);
         text->accept(computeBounds);
 
@@ -595,43 +631,55 @@ vec2 StandardLayout::alignment(const Data* text, const Font& font) const
         float right = computeBounds.max_pos.x;
         float top = computeBounds.max_pos.y;
 
+        // 根据水平对齐方式计算水平偏移
         vec2 offset(0.0f, 0.0f);
         switch (horizontalAlignment)
         {
-        case (BASELINE_ALIGNMENT): offset.x = 0.0; break;
-        case (LEFT_ALIGNMENT): offset.x = -left; break;
-        case (CENTER_ALIGNMENT): offset.x = -(right + left) * 0.5f; break;
-        case (RIGHT_ALIGNMENT): offset.x = -right; break;
+        case (BASELINE_ALIGNMENT): offset.x = 0.0; break;  // 基线对齐，无偏移
+        case (LEFT_ALIGNMENT): offset.x = -left; break;  // 左对齐
+        case (CENTER_ALIGNMENT): offset.x = -(right + left) * 0.5f; break;  // 居中对齐
+        case (RIGHT_ALIGNMENT): offset.x = -right; break;  // 右对齐
         }
 
+        // 根据垂直对齐方式计算垂直偏移
         switch (verticalAlignment)
         {
-        case (BASELINE_ALIGNMENT): offset.y = 0.0f; break;
-        case (TOP_ALIGNMENT): offset.y = -top; break;
-        case (CENTER_ALIGNMENT): offset.y = -(bottom + top) * 0.5f; break;
-        case (BOTTOM_ALIGNMENT): offset.y = -bottom; break;
+        case (BASELINE_ALIGNMENT): offset.y = 0.0f; break;  // 基线对齐，无偏移
+        case (TOP_ALIGNMENT): offset.y = -top; break;  // 顶部对齐
+        case (CENTER_ALIGNMENT): offset.y = -(bottom + top) * 0.5f; break;  // 居中对齐
+        case (BOTTOM_ALIGNMENT): offset.y = -bottom; break;  // 底部对齐
         }
 
         return offset;
     }
 
+    // 如果使用基线对齐，返回零偏移
     return {};
 }
 
+// 计算文本的边界框
+// 计算文本在3D空间中的边界框
+// text: 文本数据
+// font: 字体对象
+// 返回值：文本的3D边界框
 dbox StandardLayout::extents(const Data* text, const Font& font) const
 {
+    // 计算文本边界
     StandardLayoutComputeBounds computeBounds(*this, font);
     text->accept(computeBounds);
+    // 获取对齐偏移
     auto align = computeBounds.alignment();
 
+    // 计算局部坐标系中的最小和最大位置（应用对齐偏移）
     vec3 local_min(computeBounds.min_pos.x + align.x, computeBounds.min_pos.y + align.y, 0.0);
     vec3 local_max(computeBounds.max_pos.x + align.x, computeBounds.max_pos.y + align.y, 0.0);
 
+    // 将局部坐标转换为世界坐标，构建边界框
     dbox bb;
-    bb.add(position + (horizontal * local_min.x) + (vertical * local_min.y));
-    bb.add(position + (horizontal * local_max.x) + (vertical * local_min.y));
-    bb.add(position + (horizontal * local_max.x) + (vertical * local_max.y));
-    bb.add(position + (horizontal * local_min.x) + (vertical * local_max.y));
+    bb.add(position + (horizontal * local_min.x) + (vertical * local_min.y));  // 左下角
+    bb.add(position + (horizontal * local_max.x) + (vertical * local_min.y));  // 右下角
+    bb.add(position + (horizontal * local_max.x) + (vertical * local_max.y));  // 右上角
+    bb.add(position + (horizontal * local_min.x) + (vertical * local_max.y));  // 左上角
 
     return bb;
 }

@@ -15,8 +15,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include <float.h>
 
+// 获取本机长双精度浮点数的位数
+// 根据长双精度浮点数的尾数位数返回相应的位数
+// 返回值：64、80或128，表示长双精度浮点数的位数
 uint32_t vsg::native_long_double_bits()
 {
+    // 如果长双精度和双精度的尾数位数相同，返回64位
     if (LDBL_MANT_DIG == DBL_MANT_DIG) return 64;
+    // 如果尾数位数小于等于64，返回80位；否则返回128位
     return LDBL_MANT_DIG <= 64 ? 80 : 128;
 }

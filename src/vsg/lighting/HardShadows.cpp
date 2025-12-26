@@ -14,26 +14,40 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// HardShadows类的构造函数
+// 创建硬阴影设置，产生清晰的阴影边缘（无柔化）
+// in_shadowMaps: 阴影贴图数量
 HardShadows::HardShadows(uint32_t in_shadowMaps) :
     Inherit(in_shadowMaps)
 {
 }
 
+// HardShadows类的拷贝构造函数
+// 使用CopyOp参数来支持深度拷贝操作
+// rhs: 要拷贝的源对象
+// copyop: 拷贝操作选项
 HardShadows::HardShadows(const HardShadows& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop)
 {
 }
 
+// 比较两个HardShadows对象
+// 直接调用基类的比较方法
+// 返回值：0表示相等，-1表示当前对象小于rhs，1表示当前对象大于rhs
 int HardShadows::compare(const Object& rhs_object) const
 {
     return ShadowSettings::compare(rhs_object);
 }
 
+// 从输入流读取HardShadows对象
+// 读取硬阴影设置（继承自ShadowSettings）
 void HardShadows::read(Input& input)
 {
     ShadowSettings::read(input);
 }
 
+// 将HardShadows对象写入输出流
+// 写入硬阴影设置（继承自ShadowSettings）
 void HardShadows::write(Output& output) const
 {
     ShadowSettings::write(output);

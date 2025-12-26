@@ -28,9 +28,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// GpuLayoutTechniqueArrayState类
+// 用于GPU布局技术的数组状态，支持GPU端文本布局计算和广告牌效果
+// 在渲染时动态计算顶点位置，实现文本始终面向相机的效果
 class VSG_DECLSPEC GpuLayoutTechniqueArrayState : public Inherit<ArrayState, GpuLayoutTechniqueArrayState>
 {
 public:
+    // 从技术、文本和广告牌标志创建数组状态
     GpuLayoutTechniqueArrayState(const GpuLayoutTechnique* in_technique, const Text* in_text, bool in_billboard) :
         technique(in_technique),
         text(in_text),
@@ -38,6 +42,7 @@ public:
     {
     }
 
+    // 拷贝构造函数
     GpuLayoutTechniqueArrayState(const GpuLayoutTechniqueArrayState& rhs) :
         Inherit(rhs),
         technique(rhs.technique),
@@ -46,16 +51,19 @@ public:
     {
     }
 
+    // 从ArrayState创建数组状态
     explicit GpuLayoutTechniqueArrayState(const ArrayState& rhs) :
         Inherit(rhs)
     {
     }
 
+    // 克隆数组状态
     ref_ptr<ArrayState> cloneArrayState() override
     {
         return GpuLayoutTechniqueArrayState::create(*this);
     }
 
+    // 从另一个数组状态克隆，但保留当前技术、文本和广告牌标志
     ref_ptr<ArrayState> cloneArrayState(ref_ptr<ArrayState> arrayState) override
     {
         auto clone = GpuLayoutTechniqueArrayState::create(*arrayState);
@@ -65,9 +73,13 @@ public:
         return clone;
     }
 
+    // 获取顶点数组（支持GPU布局和广告牌效果）
+    // 根据实例索引计算字形位置，并应用广告牌变换
+    // instanceIndex: 实例索引，表示当前处理的字形在文本中的位置
+    // 返回值：计算后的顶点数组
     ref_ptr<const vec3Array> vertexArray(uint32_t instanceIndex) override
     {
-        // compute the position of the glyph
+        // 计算当前字形的位置（累积前面所有字形的水平/垂直偏移）
         float horiAdvance = 0.0;
         float vertAdvance = 0.0;
         for (uint32_t i = 0; i < instanceIndex; ++i)
@@ -75,25 +87,28 @@ public:
             uint32_t glyph_index = technique->textArray->at(i);
             if (glyph_index == 0)
             {
-                // treat as a newlline
+                // 将索引0视为换行符
                 vertAdvance -= 1.0;
                 horiAdvance = 0.0;
             }
             else
             {
+                // 累加前面字形的水平前进距离
                 const GlyphMetrics& glyph_metrics = text->font->glyphMetrics->at(glyph_index);
                 horiAdvance += glyph_metrics.horiAdvance;
             }
         }
 
+        // 获取当前字形的索引和度量
         uint32_t glyph_index = technique->textArray->at(instanceIndex);
         const GlyphMetrics& glyph_metrics = text->font->glyphMetrics->at(glyph_index);
 
-        // billboard effect
+        // 计算广告牌效果
         auto textLayout = technique->layoutValue->value();
         dmat4 transform_to_local;
         if (billboard && !localToWorldStack.empty() && !worldToLocalStack.empty())
         {
+            // 计算广告牌变换矩阵，使文本始终面向相机
             const dmat4& mv = localToWorldStack.back();
             const dmat4& inverse_mv = worldToLocalStack.back();
             dvec3 center_eye = mv * dvec3(textLayout.position);
@@ -102,30 +117,38 @@ public:
         }
         else
         {
+            // 如果没有广告牌效果，只进行平移
             transform_to_local = vsg::translate(textLayout.position);
         }
 
+        // 计算6个顶点的位置（每个字形由两个三角形组成，共6个顶点）
         auto new_vertices = vsg::vec3Array::create(6);
         auto src_vertex_itr = vertices->begin();
         for (auto& v : *new_vertices)
         {
             const auto& sv = *(src_vertex_itr++);
 
-            // compute the position of vertex
+            // 计算顶点的位置（基于字形度量、布局和对齐）
             vec3 pos = textLayout.horizontal * (horiAdvance + textLayout.horizontalAlignment + glyph_metrics.horiBearingX + sv.x * glyph_metrics.width) +
                        textLayout.vertical * (vertAdvance + textLayout.verticalAlignment + glyph_metrics.horiBearingY + (sv.y - 1.f) * glyph_metrics.height);
 
+            // 应用变换到顶点
             v = vec3(transform_to_local * dvec3(pos));
         }
 
         return new_vertices;
     }
 
-    const GpuLayoutTechnique* technique = nullptr;
-    const Text* text = nullptr;
-    bool billboard = false;
+    const GpuLayoutTechnique* technique = nullptr;  // 指向GPU布局技术的指针
+    const Text* text = nullptr;  // 指向文本对象的指针
+    bool billboard = false;  // 是否需要广告牌效果
 };
 
+// 赋值辅助函数
+// 如果源值和目标值不同，则更新目标值并设置更新标志
+// dest: 目标值
+// src: 源值
+// updated: 更新标志
 template<typename T>
 void assignValue(T& dest, const T& src, bool& updated)
 {
@@ -134,14 +157,22 @@ void assignValue(T& dest, const T& src, bool& updated)
     updated = true;
 }
 
+// 设置单个文本对象的GPU布局技术
+// 为文本对象创建渲染子图，使用GPU进行文本布局计算
+// text: 要设置的文本对象
+// minimumAllocation: 最小分配大小
+// options: 选项对象
 void GpuLayoutTechnique::setup(Text* text, uint32_t minimumAllocation, ref_ptr<const Options> options)
 {
+    // 检查必要的对象是否存在
     if (!text || !(text->text) || !text->font || !text->layout) return;
 
     auto& layout = text->layout;
 
+    // 计算文本的边界范围
     textExtents = layout->extents(text->text, *(text->font));
 
+    // 跟踪布局和文本数组是否更新
     bool textLayoutUpdated = false;
     bool textArrayUpdated = false;
 
@@ -340,6 +371,11 @@ void GpuLayoutTechnique::setup(Text* text, uint32_t minimumAllocation, ref_ptr<c
     {
     }
 }
+// 设置文本组的GPU布局技术
+// 注意：目前还不支持文本组
+// textGroup: 要设置的文本组
+// minimumAllocation: 最小分配大小
+// options: 选项对象
 void GpuLayoutTechnique::setup(TextGroup* textGroup, uint32_t minimumAllocation, ref_ptr<const Options> options)
 {
     info("GpuLayoutTechnique::setup(", textGroup, ", ", minimumAllocation, options, ") not yet supported");

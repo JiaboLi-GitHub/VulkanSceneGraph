@@ -17,30 +17,40 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// Group类的构造函数
+// 初始化指定数量的子节点容器
 Group::Group(size_t numChildren) :
     children(numChildren)
 {
 }
 
+// Group类的拷贝构造函数
+// 使用CopyOp参数来支持深度拷贝操作，包括子节点的拷贝
 Group::Group(const Group& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     children(copyop(rhs.children))
 {
 }
 
+// Group类的析构函数
 Group::~Group()
 {
 }
 
+// 比较两个Group对象
+// 首先比较基类，然后比较子节点容器
 int Group::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
     if (result != 0) return result;
 
     const auto& rhs = static_cast<decltype(*this)>(rhs_object);
+    // 比较子节点容器
     return compare_pointer_container(children, rhs.children);
 }
 
+// 从输入流读取Group对象
+// 读取子节点列表
 void Group::read(Input& input)
 {
     Node::read(input);
@@ -48,6 +58,8 @@ void Group::read(Input& input)
     input.readObjects("children", children);
 }
 
+// 将Group对象写入输出流
+// 写入子节点列表
 void Group::write(Output& output) const
 {
     Node::write(output);

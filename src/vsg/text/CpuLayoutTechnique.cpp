@@ -28,30 +28,38 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// CpuLayoutTechniqueArrayState类
+// 用于CPU布局技术的数组状态，支持广告牌效果（billboard）
+// 在渲染时动态计算顶点位置，实现文本始终面向相机的效果
 class VSG_DECLSPEC CpuLayoutTechniqueArrayState : public Inherit<ArrayState, CpuLayoutTechniqueArrayState>
 {
 public:
+    // 拷贝构造函数
     CpuLayoutTechniqueArrayState(const CpuLayoutTechniqueArrayState& rhs) :
         Inherit(rhs),
         technique(rhs.technique)
     {
     }
 
+    // 从CpuLayoutTechnique创建数组状态
     explicit CpuLayoutTechniqueArrayState(const CpuLayoutTechnique* in_technique) :
         technique(in_technique)
     {
     }
 
+    // 从ArrayState创建数组状态
     explicit CpuLayoutTechniqueArrayState(const ArrayState& rhs) :
         Inherit(rhs)
     {
     }
 
+    // 克隆数组状态
     ref_ptr<ArrayState> cloneArrayState() override
     {
         return CpuLayoutTechniqueArrayState::create(*this);
     }
 
+    // 从另一个数组状态克隆，但保留当前技术
     ref_ptr<ArrayState> cloneArrayState(ref_ptr<ArrayState> arrayState) override
     {
         auto clone = CpuLayoutTechniqueArrayState::create(*arrayState);
@@ -59,6 +67,10 @@ public:
         return clone;
     }
 
+    // 获取顶点数组（支持广告牌效果）
+    // 根据广告牌设置动态计算顶点位置，使文本始终面向相机
+    // instanceIndex: 实例索引（未使用）
+    // 返回值：计算后的顶点数组
     ref_ptr<const vec3Array> vertexArray(uint32_t /*instanceIndex*/) override
     {
         auto new_vertices = vsg::vec3Array::create(static_cast<uint32_t>(vertices->size()));
@@ -68,17 +80,20 @@ public:
         {
             const auto& sv = *(src_vertex_itr++);
 
-            // single value vs per vertex value
+            // 获取单个值或每个顶点的值
             dvec4 centerAndAutoScaleDistance;
             if (technique->centerAndAutoScaleDistances->size() == 1)
+                // 如果只有一个值，所有顶点共享
                 centerAndAutoScaleDistance = technique->centerAndAutoScaleDistances->at(0);
             else
+                // 如果每个顶点都有值，使用当前顶点的值
                 centerAndAutoScaleDistance = technique->centerAndAutoScaleDistances->at(v_index++);
 
-            // billboard effect
+            // 计算广告牌效果
             dmat4 billboard_to_local;
             if (!localToWorldStack.empty() && !worldToLocalStack.empty())
             {
+                // 计算广告牌变换矩阵，使文本始终面向相机
                 const dmat4& mv = localToWorldStack.back();
                 const dmat4& inverse_mv = worldToLocalStack.back();
                 dvec3 center_eye = mv * centerAndAutoScaleDistance.xyz;
@@ -87,48 +102,71 @@ public:
             }
             else
             {
+                // 如果没有变换栈，只进行平移
                 billboard_to_local = vsg::translate(centerAndAutoScaleDistance.xyz);
             }
 
+            // 应用广告牌变换到顶点
             v = vec3(billboard_to_local * dvec3(sv));
         }
 
         return new_vertices;
     }
 
-    const CpuLayoutTechnique* technique = nullptr;
+    const CpuLayoutTechnique* technique = nullptr;  // 指向CPU布局技术的指针
 };
 
+// 设置单个文本对象的CPU布局技术
+// 为文本对象创建渲染子图，使用CPU进行文本布局计算
+// text: 要设置的文本对象
+// minimumAllocation: 最小分配大小
+// options: 选项对象
 void CpuLayoutTechnique::setup(Text* text, uint32_t minimumAllocation, ref_ptr<const Options> options)
 {
+    // 检查必要的对象是否存在
     if (!text || !(text->text) || !text->font || !text->layout) return;
 
     const auto& font = text->font;
     auto& layout = text->layout;
+    // 获取或创建着色器集
     auto shaderSet = text->shaderSet ? text->shaderSet : createTextShaderSet(options);
 
+    // 计算文本的边界范围
     textExtents = layout->extents(text->text, *font);
 
+    // 统计文本中的字形数量
     auto num_quads = vsg::visit<CountGlyphs>(text->text).count;
 
+    // 创建文本四边形并布局
     TextQuads quads;
     quads.reserve(num_quads);
     layout->layout(text->text, *font, quads);
 
+    // 创建渲染子图
     scenegraph = createRenderingSubgraph(shaderSet, font, layout->requiresBillboard(), quads, minimumAllocation);
 }
 
+// 设置文本组的CPU布局技术
+// 为文本组创建渲染子图，合并所有子文本的布局
+// textGroup: 要设置的文本组
+// minimumAllocation: 最小分配大小
+// options: 选项对象
 void CpuLayoutTechnique::setup(TextGroup* textGroup, uint32_t minimumAllocation, ref_ptr<const Options> options)
 {
+    // 检查文本组和子对象是否存在
     if (!textGroup || textGroup->children.empty()) return;
 
     const auto& font = textGroup->font;
+    // 获取或创建着色器集
     auto shaderSet = textGroup->shaderSet ? textGroup->shaderSet : createTextShaderSet(options);
 
+    // 从第一个子文本获取布局信息
     auto& first_text = textGroup->children.front();
     auto& layout = first_text->layout;
+    // 检查是否需要广告牌效果
     bool requiresBillboard = layout && layout->requiresBillboard();
 
+    // 统计所有子文本的字形数量并计算总边界
     textExtents = {};
     CountGlyphs countGlyphs;
     for (auto& text : textGroup->children)
@@ -140,6 +178,7 @@ void CpuLayoutTechnique::setup(TextGroup* textGroup, uint32_t minimumAllocation,
         }
     }
 
+    // 为所有子文本创建文本四边形
     TextQuads quads;
     quads.reserve(countGlyphs.count);
     for (auto& text : textGroup->children)
@@ -147,19 +186,32 @@ void CpuLayoutTechnique::setup(TextGroup* textGroup, uint32_t minimumAllocation,
         if (text->text && text->layout) text->layout->layout(text->text, *font, quads);
     }
 
+    // 创建渲染子图
     scenegraph = createRenderingSubgraph(shaderSet, font, requiresBillboard, quads, minimumAllocation);
 }
 
+// 创建渲染子图
+// 从文本四边形创建完整的渲染场景图，包括状态组、图形管道和绘制命令
+// shaderSet: 着色器集
+// font: 字体对象
+// billboard: 是否需要广告牌效果
+// quads: 文本四边形列表
+// minimumAllocation: 最小分配大小
+// 返回值：渲染子图的根节点
 ref_ptr<Node> CpuLayoutTechnique::createRenderingSubgraph(ref_ptr<ShaderSet> shaderSet, ref_ptr<Font> font, bool billboard, TextQuads& quads, uint32_t minimumAllocation)
 {
+    // 如果没有四边形，返回空节点
     if (quads.empty()) return {};
 
     ref_ptr<StateGroup> stategroup;
 
+    // 从第一个四边形获取初始颜色和轮廓信息
     vec4 color = quads.front().colors[0];
     vec4 outlineColor = quads.front().outlineColors[0];
     float outlineWidth = quads.front().outlineWidths[0];
     vec4 centerAndAutoScaleDistance = quads.front().centerAndAutoScaleDistance;
+    
+    // 检查是否所有四边形使用相同的颜色、轮廓颜色、轮廓宽度和中心自动缩放距离
     bool singleColor = true;
     bool singleOutlineColor = true;
     bool singleOutlineWidth = true;
@@ -296,13 +348,15 @@ ref_ptr<Node> CpuLayoutTechnique::createRenderingSubgraph(ref_ptr<ShaderSet> sha
     else
         drawIndexed->indexCount = static_cast<uint32_t>(quads.size() * 6);
 
-    // create StateGroup as the root of the scene/command graph to hold the GraphicsPipeline, and binding of Descriptors to decorate the whole graph
+    // 创建StateGroup作为场景/命令图的根节点，用于保存图形管道和描述符绑定
     if (!stategroup)
     {
         stategroup = StateGroup::create();
 
+        // 创建图形管道配置器
         auto config = vsg::GraphicsPipelineConfigurator::create(shaderSet);
 
+        // 获取或创建共享对象管理器
         auto& sharedObjects = font->sharedObjects;
         if (!sharedObjects) sharedObjects = SharedObjects::create();
 
@@ -357,12 +411,13 @@ ref_ptr<Node> CpuLayoutTechnique::createRenderingSubgraph(ref_ptr<ShaderSet> sha
         drawCommands->addChild(drawIndexed);
         stategroup->addChild(drawCommands);
 
-        // Assign ArrayState for CPU mapping of vertices for billboarding
+        // 为广告牌效果分配ArrayState，用于CPU映射顶点
         if (billboard)
             stategroup->prototypeArrayState = CpuLayoutTechniqueArrayState::create(this);
     }
     else
     {
+        // 注意：CpuLayoutTechnique::setup()目前还不支持更新，建议使用GpuLayoutTechnique代替
         info("TODO : CpuLayoutTechnique::setup(), does not yet support updates. Consider using GpuLayoutTechnique instead.");
         // bindVertexBuffers->copyDataToBuffers();
         // bindIndexBuffer->copyDataToBuffers();

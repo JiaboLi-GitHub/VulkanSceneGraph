@@ -16,25 +16,35 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// Objects类的构造函数
+// 创建包含指定数量子对象的Objects对象
+// numChildren: 子对象的数量
 Objects::Objects(size_t numChildren) :
     children(numChildren)
 {
 }
 
+// Objects类的析构函数
 Objects::~Objects()
 {
 }
 
+// 从输入流读取Objects对象
+// 读取子对象列表
 void Objects::read(Input& input)
 {
     Object::read(input);
 
+    // 读取子对象列表
     input.readObjects("children", children);
 }
 
+// 将Objects对象写入输出流
+// 写入子对象列表
 void Objects::write(Output& output) const
 {
     Object::write(output);
 
+    // 写入子对象列表
     output.writeObjects("children", children);
 }

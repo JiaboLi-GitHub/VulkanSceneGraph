@@ -19,14 +19,22 @@ using namespace vsg;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// inverse
+// 矩阵求逆相关函数
 //
+
+// 计算两个矩阵的差异
+// 计算两个矩阵对应元素差值的绝对值之和
+// lhs: 左侧矩阵
+// rhs: 右侧矩阵
+// 返回值：差异值
 template<class T>
 typename T::value_type difference(const T& lhs, const T& rhs)
 {
     typename T::value_type delta = 0.0;
+    // 遍历所有列
     for (std::size_t c = 0; c < lhs.columns(); ++c)
     {
+        // 遍历所有行
         for (std::size_t r = 0; r < rhs.rows(); ++r)
         {
             delta += std::abs(lhs[c][r] - rhs[c][r]);
@@ -35,15 +43,22 @@ typename T::value_type difference(const T& lhs, const T& rhs)
     return delta;
 }
 
+// 计算4x4矩阵的3x3逆矩阵（忽略平移部分）
+// 从4x4矩阵中提取3x3部分并计算其逆矩阵
+// m: 输入的4x4矩阵
+// 返回值：3x3逆矩阵，如果矩阵不可逆则返回包含NaN的矩阵
 template<class T>
 t_mat3<T> t_inverse_3x3(const t_mat4<T>& m)
 {
     using value_type = T;
 
+    // 计算3x3子矩阵的行列式
     value_type det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 
+    // 如果行列式为0，矩阵不可逆
     if (det == value_type(0.0)) return t_mat3<T>(std::numeric_limits<value_type>::quiet_NaN()); // could use signaling_NaN()
 
+    // 计算行列式的倒数
     value_type inv_det = value_type(1.0) / det;
 
     value_type m00 = inv_det * (m[1][1] * m[2][2] - m[1][2] * m[2][1]);
@@ -61,23 +76,31 @@ t_mat3<T> t_inverse_3x3(const t_mat4<T>& m)
                      m20, m21, m22); // column 2
 }
 
+// 计算float类型4x4矩阵的3x3逆矩阵
 mat3 vsg::inverse_3x3(const mat4& m)
 {
     return t_inverse_3x3<float>(m);
 }
 
+// 计算double类型4x4矩阵的3x3逆矩阵
 dmat3 vsg::inverse_3x3(const dmat4& m)
 {
     return t_inverse_3x3<double>(m);
 }
 
+// 计算4x3仿射变换矩阵的逆矩阵
+// 假设矩阵的第四行是(0, 0, 0, 1)，即仿射变换矩阵
+// m: 输入的4x4仿射变换矩阵
+// 返回值：4x4逆矩阵，如果矩阵不可逆则返回包含NaN的矩阵
 template<class T>
 T t_inverse_4x3(const T& m)
 {
     using value_type = typename T::value_type;
 
+    // 计算3x3子矩阵的行列式
     value_type det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 
+    // 如果行列式为0，矩阵不可逆
     if (det == value_type(0.0)) return T(std::numeric_limits<value_type>::quiet_NaN()); // could use signaling_NaN()
 
     value_type A1223 = m[2][1] * m[3][2] - m[2][2] * m[3][1];
@@ -203,8 +226,12 @@ dmat4 vsg::inverse(const dmat4& m)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// compute determinant of a matrix
+// 计算矩阵的行列式
 //
+
+// 计算4x4矩阵的行列式
+// m: 输入的4x4矩阵
+// 返回值：矩阵的行列式值
 template<class T>
 T t_determinant(const t_mat4<T>& m)
 {
@@ -233,20 +260,27 @@ double vsg::determinant(const dmat4& m)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-/// decompose float matrix into translation, rotation and scale components.
+// 将矩阵分解为平移、旋转和缩放分量
+//
+
+// 将4x4变换矩阵分解为平移、旋转（四元数）和缩放分量
+// m: 输入的4x4变换矩阵
+// translation: 输出的平移向量
+// rotation: 输出的旋转四元数
+// scale: 输出的缩放向量
+// 返回值：true表示分解成功，false表示分解失败（例如某个轴的缩放为0）
 template<class T>
 bool t_decompose(const t_mat4<T>& m, t_vec3<T>& translation, t_quat<T>& rotation, t_vec3<T>& scale)
 {
-    // get the translation.
+    // 获取平移分量（矩阵的第四列的前三个元素）
     translation = m[3].xyz;
 
-    // compute the scale
+    // 计算缩放分量（各轴向量的长度）
     scale[0] = length(m[0].xyz);
     scale[1] = length(m[1].xyz);
     scale[2] = length(m[2].xyz);
 
-    // check that we don't have any axis scaled by 0 as this would cause a
-    // divide by zero in the rotation code.
+    // 检查是否有任何轴的缩放为0，这会导致旋转计算中的除零错误
     if (scale[0] == 0.0 || scale[1] == 0.0 || scale[2] == 0.0) return false;
 
     // compute rotation matrix and subsequently the quaternion
@@ -304,13 +338,19 @@ bool vsg::decompose(const ldmat4& m, ldvec3& translation, ldquat& rotation, ldve
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// computeFrustumBound
+// 计算视锥体的包围球
 //
+
+// 计算视锥体变换矩阵对应的包围球
+// 通过计算视锥体八个角点来找到最小的包围球
+// m: 视锥体的变换矩阵（通常是投影矩阵的逆矩阵）
+// 返回值：包围球（包含中心点和半径）
 template<typename T>
 t_sphere<T> t_computeFrustumBound(const t_mat4<T>& m)
 {
     using vec_type = t_vec3<T>;
     using value_type = T;
+    // 计算矩阵的逆矩阵，用于将NDC坐标转换回世界坐标
     auto inv_m = inverse(m);
 
     auto update_radius2 = [&](value_type& r, const vec_type& center, const vec_type& corner) -> void {
@@ -373,8 +413,15 @@ dsphere vsg::computeFrustumBound(const dmat4& m)
     return t_computeFrustumBound<double>(m);
 }
 
+// 坐标约定转换
+// 在不同坐标约定（X_UP、Y_UP、Z_UP）之间转换变换矩阵
+// source: 源坐标约定
+// destination: 目标坐标约定
+// matrix: 要转换的变换矩阵（会被修改）
+// 返回值：true表示转换成功，false表示不需要转换或参数无效
 bool vsg::transform(CoordinateConvention source, CoordinateConvention destination, dmat4& matrix)
 {
+    // 如果源和目标相同，或者任一为NO_PREFERENCE，则不需要转换
     if (source == destination || source == CoordinateConvention::NO_PREFERENCE || destination == CoordinateConvention::NO_PREFERENCE) return false;
 
     if (source == CoordinateConvention::X_UP)
@@ -431,22 +478,30 @@ bool vsg::transform(CoordinateConvention source, CoordinateConvention destinatio
     return true;
 }
 
+// 应用Transform变换
+// 将Transform节点的变换应用到当前矩阵
 void ComputeTransform::apply(const Transform& transform)
 {
     matrix = transform.transform(matrix);
 }
 
+// 应用MatrixTransform变换
+// 将MatrixTransform节点的矩阵右乘到当前矩阵
 void ComputeTransform::apply(const MatrixTransform& mt)
 {
     matrix = matrix * mt.matrix;
 }
 
+// 应用CoordinateFrame变换
+// 设置坐标系的原点和旋转矩阵
 void ComputeTransform::apply(const CoordinateFrame& cf)
 {
     origin = cf.origin;
     matrix = vsg::rotate(cf.rotation);
 }
 
+// 应用Camera变换
+// 将相机的视图矩阵的逆矩阵应用到当前矩阵
 void ComputeTransform::apply(const Camera& camera)
 {
     if (camera.viewMatrix)
