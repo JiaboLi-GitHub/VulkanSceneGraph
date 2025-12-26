@@ -21,13 +21,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
-// use a static handle that is initialized once at start up to avoid multi-threaded issues associated with calling std::locale::classic().
+// 使用静态句柄，在启动时初始化一次，避免与调用std::locale::classic()相关的多线程问题
 auto s_class_locale = std::locale::classic();
 
+// 解析版本字符串
+// version_string: 版本字符串（格式：major.minor.patch.soversion）
+// 返回: 版本结构体
+// 将版本字符串解析为版本号组件
 static VsgVersion parseVersion(std::string version_string)
 {
     VsgVersion version{0, 0, 0, 0};
 
+    // 将点号替换为空格以便使用stringstream解析
     for (auto& c : version_string)
     {
         if (c == '.') c = ' ';
@@ -43,11 +48,17 @@ static VsgVersion parseVersion(std::string version_string)
     return version;
 }
 
+// 构造函数：创建VSG读取器/写入器对象
+// VSG格式是VSG的原生序列化格式，支持ASCII和二进制两种格式
 VSG::VSG() :
     _objectFactory(ObjectFactory::instance())
 {
 }
 
+// 读取文件头
+// fin: 输入流对象
+// 返回: 格式信息（格式类型和版本）
+// 从输入流读取VSG文件头（"#vsga"或"#vsgb"）和版本信息
 VSG::FormatInfo VSG::readHeader(std::istream& fin) const
 {
     fin.imbue(s_class_locale);
@@ -69,6 +80,7 @@ VSG::FormatInfo VSG::readHeader(std::istream& fin) const
         return FormatInfo(NOT_RECOGNIZED, VsgVersion{0, 0, 0, 0});
     }
 
+    // 读取版本字符串
     std::string version_string;
     std::getline(fin, version_string);
 
@@ -77,6 +89,10 @@ VSG::FormatInfo VSG::readHeader(std::istream& fin) const
     return FormatInfo(type, version);
 }
 
+// 写入文件头
+// fout: 输出流对象
+// formatInfo: 格式信息（格式类型和版本）
+// 将VSG文件头（"#vsga"或"#vsgb"）和版本信息写入输出流
 void VSG::writeHeader(std::ostream& fout, const FormatInfo& formatInfo) const
 {
     if (formatInfo.first == NOT_RECOGNIZED) return;
@@ -91,6 +107,11 @@ void VSG::writeHeader(std::ostream& fout, const FormatInfo& formatInfo) const
     fout << " " << version.major << "." << version.minor << "." << version.patch << "\n";
 }
 
+// 从文件读取对象
+// filename: 文件名路径
+// options: 选项对象
+// 返回: 读取的对象，如果失败则返回空指针
+// 根据文件扩展名（.vsgb、.vsgt）和文件头确定格式（ASCII或二进制），然后读取对象
 vsg::ref_ptr<vsg::Object> VSG::read(const vsg::Path& filename, ref_ptr<const Options> options) const
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "VSG read", COLOR_READ);
@@ -103,9 +124,11 @@ vsg::ref_ptr<vsg::Object> VSG::read(const vsg::Path& filename, ref_ptr<const Opt
     std::ifstream fin(filenameToUse, std::ios::in | std::ios::binary);
     if (!fin) return {};
 
+    // 读取文件头以确定格式类型和版本
     auto [type, version] = readHeader(fin);
     if (type == BINARY)
     {
+        // 使用二进制输入读取
         vsg::BinaryInput input(fin, _objectFactory, options);
         input.filename = filenameToUse;
         input.version = version;
@@ -113,13 +136,14 @@ vsg::ref_ptr<vsg::Object> VSG::read(const vsg::Path& filename, ref_ptr<const Opt
     }
     else if (type == ASCII)
     {
+        // 使用ASCII输入读取
         vsg::AsciiInput input(fin, _objectFactory, options);
         input.filename = filenameToUse;
         input.version = version;
         return input.readObject("Root");
     }
 
-    // return null as no means for loading file has been found
+    // 返回空指针，因为没有找到加载文件的方法
     return {};
 }
 
@@ -156,12 +180,19 @@ vsg::ref_ptr<vsg::Object> VSG::read(const uint8_t* ptr, size_t size, vsg::ref_pt
     return read(fin, options);
 }
 
+// 将对象写入文件
+// object: 要写入的对象
+// filename: 文件名路径
+// options: 选项对象
+// 返回: 如果成功写入则返回true
+// 根据文件扩展名（.vsgb为二进制，.vsga/.vsgt为ASCII）选择格式并写入对象
 bool VSG::write(const vsg::Object* object, const vsg::Path& filename, ref_ptr<const Options> options) const
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "VSG write", COLOR_READ);
 
     auto version = vsgGetVersion();
 
+    // 如果选项中有版本字符串，使用它
     if (options)
     {
         std::string version_string;
@@ -174,6 +205,7 @@ bool VSG::write(const vsg::Object* object, const vsg::Path& filename, ref_ptr<co
     auto ext = vsg::lowerCaseFileExtension(filename);
     if (ext == ".vsgb")
     {
+        // 二进制格式
         std::ofstream fout(filename, std::ios::out | std::ios::binary);
         writeHeader(fout, FormatInfo{BINARY, version});
 
@@ -184,6 +216,7 @@ bool VSG::write(const vsg::Object* object, const vsg::Path& filename, ref_ptr<co
     }
     else if (ext == ".vsga" || ext == ".vsgt")
     {
+        // ASCII格式
         std::ofstream fout(filename, std::ios::out | std::ios::binary);
         writeHeader(fout, FormatInfo{ASCII, version});
 

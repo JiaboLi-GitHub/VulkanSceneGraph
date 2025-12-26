@@ -23,12 +23,16 @@ namespace vsg
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
     //
-    // intercept_streambuf takes std::cout/cerr output and redirects it the Logger
+    // intercept_streambuf - 拦截标准输出流缓冲区，将std::cout/cerr输出重定向到Logger
     //
 
+    // 拦截流缓冲区类：拦截标准输出流并将输出重定向到日志记录器
     class intercept_streambuf : public std::streambuf
     {
     public:
+        // 构造函数：创建拦截流缓冲区
+        // in_logger: 日志记录器对象
+        // in_level: 日志级别
         explicit intercept_streambuf(Logger* in_logger, Logger::Level in_level) :
             logger(in_logger),
             level(in_level)
@@ -38,6 +42,11 @@ namespace vsg
         Logger* logger = nullptr;
         Logger::Level level = Logger::LOGGER_INFO;
 
+        // 写入字符序列
+        // s: 字符序列
+        // n: 字符数量
+        // 返回: 写入的字符数量
+        // 将字符追加到当前行，等待换行符
         std::streamsize xsputn(const char_type* s, std::streamsize n) override
         {
             std::scoped_lock<std::mutex> lock(_mutex);
@@ -45,6 +54,10 @@ namespace vsg
             return n;
         }
 
+        // 溢出处理（当缓冲区满时调用）
+        // c: 要写入的字符
+        // 返回: 字符值
+        // 如果遇到换行符，将当前行发送到日志记录器
         std::streambuf::int_type overflow(std::streambuf::int_type c) override
         {
             std::scoped_lock<std::mutex> lock(_mutex);
@@ -61,38 +74,48 @@ namespace vsg
         }
 
     protected:
-        std::string _line;
-        std::mutex _mutex;
+        std::string _line;  // 当前行缓冲区
+        std::mutex _mutex;  // 互斥锁（用于线程安全）
     };
 
 } // namespace vsg
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Logger
+// Logger - 日志记录器基类，提供统一的日志记录接口
 //
+// 构造函数：创建日志记录器对象（默认）
+// 默认日志级别为LOGGER_INFO（打印信息和以上级别的消息）
 Logger::Logger()
 {
-    // level = LOGGER_ALL; // print all messages
-    // level = LOGGER_DEBUG; // print debugs and above messages
-    // level = LOGGER_INFO; // default, print info and above messages
-    // level = LOGGER_WARN; // print warn and above messages
-    // level = LOGGER_ERROR; // print error and above messages
-    // level = LOGGER_FATAL; // print error and above messages
+    // level = LOGGER_ALL; // 打印所有消息
+    // level = LOGGER_DEBUG; // 打印调试及以上的消息
+    // level = LOGGER_INFO; // 默认，打印信息及以上的消息
+    // level = LOGGER_WARN; // 打印警告及以上的消息
+    // level = LOGGER_ERROR; // 打印错误及以上的消息
+    // level = LOGGER_FATAL; // 打印致命错误及以上的消息
 }
 
+// 拷贝构造函数：从另一个日志记录器对象创建新的日志记录器对象
+// rhs: 要拷贝的日志记录器对象
+// 拷贝日志级别
 Logger::Logger(const Logger& rhs) :
     Logger()
 {
     level = rhs.level;
 }
 
+// 析构函数：销毁日志记录器对象
+// 恢复标准输出流的原始缓冲区
 Logger::~Logger()
 {
     if (_original_cout) std::cout.rdbuf(_original_cout);
     if (_original_cerr) std::cerr.rdbuf(_original_cerr);
 }
 
+// 获取日志记录器单例实例
+// 返回: 日志记录器实例的引用
+// 默认使用标准日志记录器（StdLogger），也可以使用线程日志记录器（ThreadLogger）
 ref_ptr<Logger>& Logger::instance()
 {
     static ref_ptr<Logger> s_logger = StdLogger::create();
@@ -100,6 +123,9 @@ ref_ptr<Logger>& Logger::instance()
     return s_logger;
 }
 
+// 重定向标准输出流
+// 将std::cout和std::cerr的输出重定向到日志记录器
+// std::cout重定向到INFO级别，std::cerr重定向到ERROR级别
 void Logger::redirect_std()
 {
     _override_cout.reset(new intercept_streambuf(this, LOGGER_INFO));
@@ -213,38 +239,56 @@ void Logger::log_stream(Level msg_level, PrintToStreamFunction print)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// StdLogger
+// StdLogger - 标准日志记录器，将日志输出到标准输出/错误流
 //
+// 构造函数：创建标准日志记录器对象
 StdLogger::StdLogger()
 {
 }
 
+// 刷新输出流
+// 刷新标准输出和标准错误流
 void StdLogger::flush()
 {
     fflush(stdout);
     fflush(stderr);
 }
 
+// 调试消息实现
+// message: 消息内容
+// 将调试消息输出到标准输出流
 void StdLogger::debug_implementation(const std::string_view& message)
 {
     fprintf(stdout, "%s%.*s\n", debugPrefix.c_str(), static_cast<int>(message.length()), message.data());
 }
 
+// 信息消息实现
+// message: 消息内容
+// 将信息消息输出到标准输出流
 void StdLogger::info_implementation(const std::string_view& message)
 {
     fprintf(stdout, "%s%.*s\n", infoPrefix.c_str(), static_cast<int>(message.length()), message.data());
 }
 
+// 警告消息实现
+// message: 消息内容
+// 将警告消息输出到标准错误流
 void StdLogger::warn_implementation(const std::string_view& message)
 {
     fprintf(stderr, "%s%.*s\n", warnPrefix.c_str(), static_cast<int>(message.length()), message.data());
 }
 
+// 错误消息实现
+// message: 消息内容
+// 将错误消息输出到标准错误流
 void StdLogger::error_implementation(const std::string_view& message)
 {
     fprintf(stderr, "%s%.*s\n", errorPrefix.c_str(), static_cast<int>(message.length()), message.data());
 }
 
+// 致命错误消息实现
+// message: 消息内容
+// 将致命错误消息输出到标准错误流并抛出异常
 void StdLogger::fatal_implementation(const std::string_view& message)
 {
     fprintf(stderr, "%s%.*s\n", fatalPrefix.c_str(), static_cast<int>(message.length()), message.data());
@@ -253,24 +297,36 @@ void StdLogger::fatal_implementation(const std::string_view& message)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// ThreadLogger
+// ThreadLogger - 线程日志记录器，在日志消息中包含线程ID信息
 //
+// 构造函数：创建线程日志记录器对象
+// 线程日志记录器在每条日志消息前添加线程标识符，便于多线程调试
 ThreadLogger::ThreadLogger()
 {
 }
 
+// 刷新输出流
+// 刷新标准输出和标准错误流
 void ThreadLogger::flush()
 {
     fflush(stdout);
     fflush(stderr);
 }
 
+// 设置线程前缀
+// id: 线程ID
+// str: 线程前缀字符串
+// 为指定线程设置自定义前缀字符串（用于标识线程）
 void ThreadLogger::setThreadPrefix(std::thread::id id, const std::string& str)
 {
     std::scoped_lock<std::mutex> lock(_mutex);
     _threadPrefixes[id] = str;
 }
 
+// 打印线程ID
+// out: 输出文件流
+// id: 线程ID
+// 打印线程标识符（如果已设置自定义前缀则使用前缀，否则使用线程ID）
 void ThreadLogger::print_id(FILE* out, std::thread::id id)
 {
     if (auto itr = _threadPrefixes.find(id); itr != _threadPrefixes.end())
@@ -279,7 +335,7 @@ void ThreadLogger::print_id(FILE* out, std::thread::id id)
     }
     else
     {
-        // no name string for this thread yet, so create one using the Logger::_stream and then assign to _threadPrefixes for future use
+        // 如果此线程还没有名称字符串，使用Logger::_stream创建一个，然后分配给_threadPrefixes以供将来使用
         _stream.str({});
         _stream.clear();
         _stream << "thread::id = " << id << " | ";
@@ -320,25 +376,42 @@ void ThreadLogger::fatal_implementation(const std::string_view& message)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// NullLogger
+// NullLogger - 空日志记录器，不输出任何日志消息（致命错误除外）
 //
+// 构造函数：创建空日志记录器对象
+// 空日志记录器不输出任何日志消息，但致命错误仍会抛出异常
 NullLogger::NullLogger()
 {
     level = LOGGER_OFF;
 }
 
+// 调试消息实现（空实现）
+// 不输出任何内容
 void NullLogger::debug_implementation(const std::string_view&)
 {
 }
+
+// 信息消息实现（空实现）
+// 不输出任何内容
 void NullLogger::info_implementation(const std::string_view&)
 {
 }
+
+// 警告消息实现（空实现）
+// 不输出任何内容
 void NullLogger::warn_implementation(const std::string_view&)
 {
 }
+
+// 错误消息实现（空实现）
+// 不输出任何内容
 void NullLogger::error_implementation(const std::string_view&)
 {
 }
+
+// 致命错误消息实现
+// message: 消息内容
+// 致命错误仍会抛出异常，即使日志级别为OFF
 void NullLogger::fatal_implementation(const std::string_view& message)
 {
     throw Exception{std::string(message)};

@@ -17,6 +17,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 释放Vulkan数据
+// 销毁Vulkan图像并释放设备内存
 void Image::VulkanData::release()
 {
     if (image)
@@ -32,6 +34,11 @@ void Image::VulkanData::release()
     }
 }
 
+// 构造函数：使用数据对象创建图像对象
+// in_data: 数据对象（包含图像数据）
+// 根据数据对象的属性自动设置图像类型、格式、尺寸、Mipmap级别等
+// 支持1D、2D、3D、立方体贴图、数组等图像类型
+// 自动将RGB格式转换为RGBA格式（Vulkan不支持RGB格式）
 Image::Image(ref_ptr<Data> in_data) :
     data(in_data)
 {
@@ -42,6 +49,7 @@ Image::Image(ref_ptr<Data> in_data) :
 
         auto [width, height, depth] = data->pixelExtents();
 
+        // 根据图像视图类型设置图像类型和数组层数
         switch (properties.imageViewType)
         {
         case (VK_IMAGE_VIEW_TYPE_1D):
@@ -67,7 +75,7 @@ Image::Image(ref_ptr<Data> in_data) :
             arrayLayers = height * depth;
             height = 1;
             depth = 1;
-            /* flags = VK_IMAGE_CREATE_1D_ARRAY_COMPATIBLE_BIT; // comment out as Vulkan headers don't yet provide this. */
+            /* flags = VK_IMAGE_CREATE_1D_ARRAY_COMPATIBLE_BIT; // 注释掉，因为Vulkan头文件尚未提供此标志 */
             break;
         case (VK_IMAGE_VIEW_TYPE_2D_ARRAY):
             // imageType = VK_IMAGE_TYPE_3D;
@@ -94,7 +102,7 @@ Image::Image(ref_ptr<Data> in_data) :
 
         // vsg::info("Image::Image(", data, ") mpipLevels = ", mipLevels);
 
-        // remap RGB to RGBA
+        // 将RGB格式重新映射为RGBA格式（Vulkan不支持RGB格式）
         if (format >= VK_FORMAT_R8G8B8_UNORM && format <= VK_FORMAT_B8G8R8_SRGB)
             format = static_cast<VkFormat>(format + 14);
         else if (format >= VK_FORMAT_R16G16B16_UNORM && format <= VK_FORMAT_R16G16B16_SFLOAT)
@@ -102,10 +110,15 @@ Image::Image(ref_ptr<Data> in_data) :
         else if (format >= VK_FORMAT_R32G32B32_UINT && format <= VK_FORMAT_R32G32B32_SFLOAT)
             format = static_cast<VkFormat>(format + 3);
 
+        // 设置默认使用标志：采样和传输目标
         usage = (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     }
 }
 
+// 构造函数：使用现有Vulkan图像创建图像对象
+// image: 现有的Vulkan图像句柄
+// device: Vulkan设备对象
+// 用于包装外部创建的Vulkan图像
 Image::Image(VkImage image, Device* device)
 {
     VulkanData& vd = _vulkanData[device->deviceID];
@@ -113,6 +126,8 @@ Image::Image(VkImage image, Device* device)
     vd.device = device;
 }
 
+// 析构函数：销毁图像对象
+// 释放所有设备的Vulkan数据
 Image::~Image()
 {
     for (auto& vd : _vulkanData) vd.release();
@@ -141,6 +156,11 @@ int Image::compare(const Object& rhs_object) const
     return compare_value(initialLayout, rhs.initialLayout);
 }
 
+// 绑定设备内存到图像
+// deviceMemory: 设备内存对象
+// memoryOffset: 内存中的偏移量
+// 返回: Vulkan结果代码
+// 将设备内存绑定到图像，使图像可以使用该内存
 VkResult Image::bind(DeviceMemory* deviceMemory, VkDeviceSize memoryOffset)
 {
     VulkanData& vd = _vulkanData[deviceMemory->getDevice()->deviceID];
@@ -154,6 +174,12 @@ VkResult Image::bind(DeviceMemory* deviceMemory, VkDeviceSize memoryOffset)
     return result;
 }
 
+// 分配并绑定设备内存
+// device: Vulkan设备对象
+// memoryProperties: 内存属性标志
+// pNextAllocInfo: 可选的分配信息扩展
+// 返回: Vulkan结果代码
+// 获取内存需求，分配设备内存，并将内存绑定到图像
 VkResult Image::allocateAndBindMemory(Device* device, VkMemoryPropertyFlags memoryProperties, void* pNextAllocInfo)
 {
     auto memRequirements = getMemoryRequirements(device->deviceID);
@@ -166,6 +192,10 @@ VkResult Image::allocateAndBindMemory(Device* device, VkMemoryPropertyFlags memo
     return bind(memory, offset);
 }
 
+// 获取内存需求
+// deviceID: 设备ID
+// 返回: Vulkan内存需求结构
+// 查询图像所需的内存大小、对齐和内存类型
 VkMemoryRequirements Image::getMemoryRequirements(uint32_t deviceID) const
 {
     const VulkanData& vd = _vulkanData[deviceID];
@@ -175,11 +205,15 @@ VkMemoryRequirements Image::getMemoryRequirements(uint32_t deviceID) const
     return memRequirements;
 }
 
+// 编译图像（使用设备）
+// device: Vulkan设备对象
+// 创建Vulkan图像对象
 void Image::compile(Device* device)
 {
     auto& vd = _vulkanData[device->deviceID];
     if (vd.image != VK_NULL_HANDLE) return;
 
+    // 设置图像创建信息
     VkImageCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     info.pNext = nullptr;
@@ -201,24 +235,32 @@ void Image::compile(Device* device)
 
     vd.device = device;
 
+    // 标记是否需要复制数据
     vd.requiresDataCopy = data.valid();
 
+    // 创建Vulkan图像
     if (VkResult result = vkCreateImage(*vd.device, &info, vd.device->getAllocationCallbacks(), &vd.image); result != VK_SUCCESS)
     {
         throw Exception{"Error: Failed to create VkImage.", result};
     }
 }
 
+// 编译图像（使用上下文）
+// context: 编译上下文对象
+// 创建Vulkan图像对象，从设备内存缓冲区池分配内存并绑定
 void Image::compile(Context& context)
 {
     auto& vd = _vulkanData[context.deviceID];
     if (vd.image != VK_NULL_HANDLE) return;
 
+    // 先创建图像
     compile(context.device);
 
+    // 获取内存需求
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(*vd.device, vd.image, &memRequirements);
 
+    // 从设备内存缓冲区池预留内存
     auto [deviceMemory, offset] = context.deviceMemoryBufferPools->reserveMemory(memRequirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     if (!deviceMemory)
@@ -226,7 +268,9 @@ void Image::compile(Context& context)
         throw Exception{"Error: Image failed to reserve slot from deviceMemoryBufferPools.", VK_ERROR_OUT_OF_DEVICE_MEMORY};
     }
 
+    // 标记是否需要复制数据
     vd.requiresDataCopy = data.valid();
 
+    // 绑定内存到图像
     bind(deviceMemory, offset);
 }

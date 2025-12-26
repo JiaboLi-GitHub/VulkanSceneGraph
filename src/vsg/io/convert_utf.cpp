@@ -19,13 +19,19 @@ using namespace vsg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// copy between UTF8 <-> UTF16
+// UTF8 <-> UTF16 转换函数
 //
+// 参考：
 // https://en.wikipedia.org/wiki/UTF-8
 // https://en.wikipedia.org/wiki/UTF-16
 // OpenSceneGraph/src/osgText/String.cpp
 
-// use count to avoid erroneous utf8 encodings causing reading beyond size of buffer.
+// 解码UTF-8编码
+// itr: 输入迭代器
+// count: 字节数量
+// op: 处理每个Unicode码点的函数
+// 返回: 如果成功解码则返回true
+// 使用count避免错误的UTF-8编码导致读取超出缓冲区
 template<typename Iterator, class Func>
 bool decode_utf8(Iterator itr, size_t count, Func op)
 {
@@ -166,18 +172,29 @@ bool encode_utf16(Iterator itr, Iterator end, Func op)
     return true;
 }
 
+// 将UTF-8字符串转换为宽字符串
+// utf8: UTF-8编码的字符串
+// dst: 输出参数，用于存储转换后的宽字符串
+// 根据wchar_t的大小（16位或32位）选择合适的转换路径
 void vsg::convert_utf(const std::string& utf8, std::wstring& dst)
 {
     dst.clear();
+    // 如果wchar_t是16位，需要UTF-8 -> UTF-16转换
     if constexpr (std::numeric_limits<wchar_t>::max() == 0xFFFF)
         decode_utf8(utf8.begin(), utf8.size(), [&dst](uint32_t c) { encode_utf16(&c, (&c) + 1, [&dst](uint32_t cu) { dst.push_back(cu); }); });
     else
+        // 如果wchar_t是32位，直接存储Unicode码点
         decode_utf8(utf8.begin(), utf8.size(), [&dst](uint32_t c) { dst.push_back(c); });
 }
 
+// 将宽字符串转换为UTF-8字符串
+// src: 宽字符串
+// utf8: 输出参数，用于存储转换后的UTF-8字符串
+// 根据wchar_t的大小（16位或32位）选择合适的转换路径
 void vsg::convert_utf(const std::wstring& src, std::string& utf8)
 {
     utf8.clear();
+    // 如果wchar_t是16位，需要UTF-16 -> UTF-8转换
     if constexpr (std::numeric_limits<wchar_t>::max() == 0xFFFF)
     {
         std::u32string intermediate;
@@ -185,5 +202,6 @@ void vsg::convert_utf(const std::wstring& src, std::string& utf8)
         encode_utf8(intermediate.begin(), intermediate.end(), [&utf8](char32_t c) { utf8.push_back(static_cast<char>(c)); });
     }
     else
+        // 如果wchar_t是32位，直接编码为UTF-8
         encode_utf8(src.begin(), src.end(), [&utf8](uint32_t c) { utf8.push_back(static_cast<char>(c)); });
 }

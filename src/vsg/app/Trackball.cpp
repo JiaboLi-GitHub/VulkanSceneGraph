@@ -18,55 +18,71 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// Trackball类的构造函数
+// 创建轨迹球控制器，用于交互式相机控制
+// camera: 相机对象
+// ellipsoidModel: 椭球模型（用于地球坐标系统，可选）
 Trackball::Trackball(ref_ptr<Camera> camera, ref_ptr<EllipsoidModel> ellipsoidModel) :
-    _camera(camera),
-    _lookAt(camera->viewMatrix.cast<LookAt>()),
-    _ellipsoidModel(ellipsoidModel),
-    _keyboard(Keyboard::create())
+    _camera(camera),  // 相机对象
+    _lookAt(camera->viewMatrix.cast<LookAt>()),  // LookAt视图矩阵
+    _ellipsoidModel(ellipsoidModel),  // 椭球模型
+    _keyboard(Keyboard::create())  // 键盘对象
 {
+    // 如果没有LookAt视图矩阵，创建一个新的
     if (!_lookAt)
     {
         _lookAt = new LookAt;
     }
 
+    // 将相机约束到地球表面
     clampToGlobe();
 
+    // 添加空格键视角点（保存当前视角）
     addKeyViewpoint(KEY_Space, LookAt::create(*_lookAt), 1.0);
 }
 
+// 将相机约束到地球表面
+// 确保相机中心点在地球表面上，眼睛位置不低于最小高度
 void Trackball::clampToGlobe()
 {
     // debug("Trackball::clampToGlobe()");
 
-    if (!_ellipsoidModel) return;
+    if (!_ellipsoidModel) return;  // 没有椭球模型，跳过
 
-    // get the location of the current lookAt center
+    // 获取当前LookAt中心和眼睛位置的经纬度高度
     auto location_center = _ellipsoidModel->convertECEFToLatLongAltitude(_lookAt->center);
     auto location_eye = _ellipsoidModel->convertECEFToLatLongAltitude(_lookAt->eye);
 
+    // 计算中心点在地球表面的位置
     double ratio = location_eye.z / (location_eye.z - location_center.z);
     auto location = _ellipsoidModel->convertECEFToLatLongAltitude(_lookAt->center * ratio + _lookAt->eye * (1.0 - ratio));
 
-    // clamp to the globe
+    // 将高度约束到地球表面（高度为0）
     location.z = 0.0;
 
-    // compute clamped position back in ECEF
+    // 将约束后的位置转换回ECEF坐标
     auto ecef = _ellipsoidModel->convertLatLongAltitudeToECEF(location);
 
-    // apply the new clamped position to the LookAt.
+    // 应用新的约束位置到LookAt中心
     _lookAt->center = ecef;
 
+    // 确保眼睛位置不低于最小高度
     double minimum_altitude = 0.1;
     if (location_eye.z < minimum_altitude)
     {
         location_eye.z = minimum_altitude;
         _lookAt->eye = _ellipsoidModel->convertLatLongAltitudeToECEF(location_eye);
-        _thrown = false;
+        _thrown = false;  // 停止惯性
     }
 }
 
+// 获取相机渲染区域坐标
+// 将指针事件的窗口坐标转换为相机渲染区域坐标（考虑窗口偏移）
+// pointerEvent: 指针事件
+// 返回值：相机渲染区域坐标（x, y）
 std::pair<int32_t, int32_t> Trackball::cameraRenderAreaCoordinates(const PointerEvent& pointerEvent) const
 {
+    // 如果有窗口偏移，应用偏移
     if (!windowOffsets.empty())
     {
         auto itr = windowOffsets.find(pointerEvent.window);
@@ -76,52 +92,73 @@ std::pair<int32_t, int32_t> Trackball::cameraRenderAreaCoordinates(const Pointer
             return {pointerEvent.x + offset.x, pointerEvent.y + offset.y};
         }
     }
+    // 没有偏移，直接返回原始坐标
     return {pointerEvent.x, pointerEvent.y};
 }
 
+// 检查指针事件是否在渲染区域内
+// 检查指针事件的坐标是否在相机的渲染区域内
+// pointerEvent: 指针事件
+// 返回值：true表示在渲染区域内，false表示不在
 bool Trackball::withinRenderArea(const PointerEvent& pointerEvent) const
 {
-    auto renderArea = _camera->getRenderArea();
-    auto [x, y] = cameraRenderAreaCoordinates(pointerEvent);
+    auto renderArea = _camera->getRenderArea();  // 获取渲染区域
+    auto [x, y] = cameraRenderAreaCoordinates(pointerEvent);  // 获取相机坐标
 
+    // 检查坐标是否在渲染区域内
     return (x >= renderArea.offset.x && x < static_cast<int32_t>(renderArea.offset.x + renderArea.extent.width)) &&
            (y >= renderArea.offset.y && y < static_cast<int32_t>(renderArea.offset.y + renderArea.extent.height));
 }
 
+// 检查事件是否相关
+// 检查窗口事件是否来自与轨迹球关联的窗口
+// event: 窗口事件
+// 返回值：true表示事件相关，false表示不相关
+// 如果没有关联窗口，假设所有事件都相关
 bool Trackball::eventRelevant(const WindowEvent& event) const
 {
     // if no windows have been associated with Trackball with a Trackball::addWindow() then assume event is relevant and should be handled
-    if (windowOffsets.empty()) return true;
+    if (windowOffsets.empty()) return true;  // 没有关联窗口，所有事件都相关
 
-    return (windowOffsets.count(event.window) > 0);
+    return (windowOffsets.count(event.window) > 0);  // 检查窗口是否在关联列表中
 }
 
-/// compute non dimensional window coordinate (-1,1) from event coords
+// 计算归一化设备坐标（NDC）
+// 从事件坐标计算归一化设备坐标（范围：-1到1）
+// event: 指针事件
+// 返回值：归一化设备坐标（x, y）
 dvec2 Trackball::ndc(const PointerEvent& event)
 {
-    auto renderArea = _camera->getRenderArea();
-    auto [x, y] = cameraRenderAreaCoordinates(event);
+    auto renderArea = _camera->getRenderArea();  // 获取渲染区域
+    auto [x, y] = cameraRenderAreaCoordinates(event);  // 获取相机坐标
 
+    // 计算宽高比
     double aspectRatio = static_cast<double>(renderArea.extent.width) / static_cast<double>(renderArea.extent.height);
+    // 计算归一化坐标（考虑宽高比）
     dvec2 v(
         (renderArea.extent.width > 0) ? (static_cast<double>(x - renderArea.offset.x) / static_cast<double>(renderArea.extent.width) * 2.0 - 1.0) * aspectRatio : 0.0,
         (renderArea.extent.height > 0) ? static_cast<double>(y - renderArea.offset.y) / static_cast<double>(renderArea.extent.height) * 2.0 - 1.0 : 0.0);
     return v;
 }
 
-/// compute trackball coordinate from event coords
+// 计算轨迹球坐标（TBC）
+// 从事件坐标计算轨迹球坐标（用于旋转计算）
+// event: 指针事件
+// 返回值：轨迹球坐标（x, y, z）
 dvec3 Trackball::tbc(const PointerEvent& event)
 {
-    dvec2 v = ndc(event);
+    dvec2 v = ndc(event);  // 获取归一化设备坐标
 
-    double l = length(v);
+    double l = length(v);  // 计算距离原点的距离
     if (l < 1.0f)
     {
+        // 在单位圆内：计算z坐标（球面高度）
         double h = 0.5 + cos(l * PI) * 0.5;
-        return dvec3(v.x, -v.y, h);
+        return dvec3(v.x, -v.y, h);  // y坐标取反（屏幕坐标系）
     }
     else
     {
+        // 在单位圆外：z坐标为0（平面）
         return dvec3(v.x, -v.y, 0.0);
     }
 }
@@ -583,62 +620,79 @@ void Trackball::apply(FrameEvent& frame)
     _previousTime = frame.time;
 }
 
+// 旋转相机
+// 围绕指定轴旋转相机
+// angle: 旋转角度（弧度）
+// axis: 旋转轴
 void Trackball::rotate(double angle, const dvec3& axis)
 {
-    dmat4 rotation = vsg::rotate(angle, axis);
-    dmat4 lv = lookAt(_lookAt->eye, _lookAt->center, _lookAt->up);
-    dvec3 centerEyeSpace = (lv * _lookAt->center);
+    dmat4 rotation = vsg::rotate(angle, axis);  // 创建旋转矩阵
+    dmat4 lv = lookAt(_lookAt->eye, _lookAt->center, _lookAt->up);  // 创建LookAt视图矩阵
+    dvec3 centerEyeSpace = (lv * _lookAt->center);  // 将中心点转换到眼睛空间
 
+    // 构建变换矩阵：先转换到眼睛空间，围绕中心旋转，再转换回世界空间
     dmat4 matrix = inverse(lv) * translate(centerEyeSpace) * rotation * translate(-centerEyeSpace) * lv;
 
+    // 应用变换到LookAt参数
     _lookAt->up = normalize(matrix * (_lookAt->eye + _lookAt->up) - matrix * _lookAt->eye);
     _lookAt->center = matrix * _lookAt->center;
     _lookAt->eye = matrix * _lookAt->eye;
 
+    // 约束到地球表面
     clampToGlobe();
 }
 
+// 缩放相机（拉近/拉远）
+// 沿着视线方向移动相机
+// ratio: 缩放比例（正数拉近，负数拉远）
 void Trackball::zoom(double ratio)
 {
-    dvec3 lookVector = _lookAt->center - _lookAt->eye;
-    _lookAt->eye = _lookAt->eye + lookVector * ratio;
+    dvec3 lookVector = _lookAt->center - _lookAt->eye;  // 视线向量
+    _lookAt->eye = _lookAt->eye + lookVector * ratio;  // 沿视线方向移动眼睛位置
 
+    // 约束到地球表面
     clampToGlobe();
 }
 
+// 平移相机（平移视图）
+// 在垂直于视线的平面上平移相机
+// delta: 平移增量（归一化设备坐标）
 void Trackball::pan(const dvec2& delta)
 {
-    dvec3 lookVector = _lookAt->center - _lookAt->eye;
-    dvec3 lookNormal = normalize(lookVector);
-    dvec3 upNormal = _lookAt->up;
-    dvec3 sideNormal = cross(lookNormal, upNormal);
+    dvec3 lookVector = _lookAt->center - _lookAt->eye;  // 视线向量
+    dvec3 lookNormal = normalize(lookVector);  // 视线方向
+    dvec3 upNormal = _lookAt->up;  // 上方向
+    dvec3 sideNormal = cross(lookNormal, upNormal);  // 侧方向（视线和上方向的叉积）
 
-    double distance = length(lookVector);
-    distance *= 0.25;
+    double distance = length(lookVector);  // 视线距离
+    distance *= 0.25;  // 缩放平移距离
 
     if (_ellipsoidModel)
     {
+        // 使用椭球模型：围绕地球中心旋转
         double scale = distance;
-        double angle = (length(delta) * scale) / _ellipsoidModel->radiusEquator();
+        double angle = (length(delta) * scale) / _ellipsoidModel->radiusEquator();  // 计算旋转角度
 
         if (angle != 0.0)
         {
-            dvec3 globeNormal = normalize(_lookAt->center);
-            dvec3 m = upNormal * (-delta.y) + sideNormal * (delta.x); // compute the position relative to the center in the eye plane
-            dvec3 v = m + lookNormal * dot(m, globeNormal);           // compensate for any tile relative to the globe normal
-            dvec3 axis = normalize(cross(globeNormal, v));            // compute the axis of rotation to map the mouse pan
+            dvec3 globeNormal = normalize(_lookAt->center);  // 地球中心方向
+            dvec3 m = upNormal * (-delta.y) + sideNormal * (delta.x); // 计算眼睛平面中相对于中心的位置
+            dvec3 v = m + lookNormal * dot(m, globeNormal);           // 补偿相对于地球法线的倾斜
+            dvec3 axis = normalize(cross(globeNormal, v));            // 计算旋转轴以映射鼠标平移
 
-            dmat4 matrix = vsg::rotate(-angle, axis);
+            dmat4 matrix = vsg::rotate(-angle, axis);  // 创建旋转矩阵
 
+            // 应用旋转到LookAt参数
             _lookAt->up = normalize(matrix * (_lookAt->eye + _lookAt->up) - matrix * _lookAt->eye);
             _lookAt->center = matrix * _lookAt->center;
             _lookAt->eye = matrix * _lookAt->eye;
 
-            clampToGlobe();
+            clampToGlobe();  // 约束到地球表面
         }
     }
     else
     {
+        // 不使用椭球模型：简单平移
         dvec3 translation = sideNormal * (-delta.x * distance) + upNormal * (delta.y * distance);
 
         _lookAt->eye = _lookAt->eye + translation;

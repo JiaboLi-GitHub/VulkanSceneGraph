@@ -15,12 +15,19 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 拷贝构造函数：从另一个状态命令对象创建新的状态命令对象
+// rhs: 要拷贝的状态命令对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 状态命令用于设置渲染管线状态（如描述符集、推送常量等）
 StateCommand::StateCommand(const StateCommand& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     slot(rhs.slot)
 {
 }
 
+// 从输入流读取状态命令对象
+// input: 输入流对象
+// 读取槽位索引（用于状态排序）
 void StateCommand::read(Input& input)
 {
     Command::read(input);
@@ -28,6 +35,10 @@ void StateCommand::read(Input& input)
     input.read("slot", slot);
 }
 
+// 比较两个状态命令对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较槽位索引
 int StateCommand::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -37,6 +48,9 @@ int StateCommand::compare(const Object& rhs_object) const
     return compare_value(slot, rhs.slot);
 }
 
+// 将状态命令对象写入输出流
+// output: 输出流对象
+// 写入槽位索引
 void StateCommand::write(Output& output) const
 {
     Command::write(output);

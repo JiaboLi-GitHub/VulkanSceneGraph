@@ -18,6 +18,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建内存缓冲区池对象
+// in_name: 池名称（用于调试）
+// in_device: 设备对象
+// in_resourceRequirements: 资源需求
+// 内存缓冲区池管理缓冲区和设备内存的分配，支持内存重用
 MemoryBufferPools::MemoryBufferPools(const std::string& in_name, ref_ptr<Device> in_device, const ResourceRequirements& in_resourceRequirements) :
     name(in_name),
     device(in_device),
@@ -26,6 +31,9 @@ MemoryBufferPools::MemoryBufferPools(const std::string& in_name, ref_ptr<Device>
 {
 }
 
+// 计算内存总可用大小
+// 返回: 所有内存池的总可用大小
+// 计算所有设备内存池的总可用内存大小
 VkDeviceSize MemoryBufferPools::computeMemoryTotalAvailable() const
 {
     std::scoped_lock<std::mutex> lock(_mutex);
@@ -38,6 +46,9 @@ VkDeviceSize MemoryBufferPools::computeMemoryTotalAvailable() const
     return totalAvailableSize;
 }
 
+// 计算内存总预留大小
+// 返回: 所有内存池的总预留大小
+// 计算所有设备内存池的总预留内存大小
 VkDeviceSize MemoryBufferPools::computeMemoryTotalReserved() const
 {
     std::scoped_lock<std::mutex> lock(_mutex);
@@ -50,6 +61,9 @@ VkDeviceSize MemoryBufferPools::computeMemoryTotalReserved() const
     return totalReservedSize;
 }
 
+// 计算缓冲区总可用大小
+// 返回: 所有缓冲区池的总可用大小
+// 计算所有缓冲区池的总可用缓冲区大小
 VkDeviceSize MemoryBufferPools::computeBufferTotalAvailable() const
 {
     std::scoped_lock<std::mutex> lock(_mutex);
@@ -62,6 +76,9 @@ VkDeviceSize MemoryBufferPools::computeBufferTotalAvailable() const
     return totalAvailableSize;
 }
 
+// 计算缓冲区总预留大小
+// 返回: 所有缓冲区池的总预留大小
+// 计算所有缓冲区池的总预留缓冲区大小
 VkDeviceSize MemoryBufferPools::computeBufferTotalReserved() const
 {
     std::scoped_lock<std::mutex> lock(_mutex);
@@ -74,12 +91,21 @@ VkDeviceSize MemoryBufferPools::computeBufferTotalReserved() const
     return totalReservedSize;
 }
 
+// 预留缓冲区
+// totalSize: 总大小
+// alignment: 对齐要求
+// bufferUsageFlags: 缓冲区使用标志
+// sharingMode: 共享模式
+// memoryProperties: 内存属性
+// 返回: 缓冲区信息对象，如果分配失败则返回空指针
+// 从缓冲区池中预留缓冲区，如果池中没有合适的缓冲区则创建新的缓冲区
 ref_ptr<BufferInfo> MemoryBufferPools::reserveBuffer(VkDeviceSize totalSize, VkDeviceSize alignment, VkBufferUsageFlags bufferUsageFlags, VkSharingMode sharingMode, VkMemoryPropertyFlags memoryProperties)
 {
     ref_ptr<BufferInfo> bufferInfo = BufferInfo::create();
 
     {
         std::scoped_lock<std::mutex> lock(_mutex);
+        // 首先尝试从现有缓冲区池中预留
         for (auto& bufferFromPool : bufferPools)
         {
             if (bufferFromPool->usage == bufferUsageFlags && bufferFromPool->size >= totalSize)
@@ -95,6 +121,7 @@ ref_ptr<BufferInfo> MemoryBufferPools::reserveBuffer(VkDeviceSize totalSize, VkD
             }
         }
 
+        // 如果没有合适的缓冲区，创建新的缓冲区
         VkDeviceSize deviceSize = std::max(totalSize, minimumBufferSize);
 
         bufferInfo->buffer = Buffer::create(deviceSize, bufferUsageFlags, sharingMode);
@@ -106,6 +133,7 @@ ref_ptr<BufferInfo> MemoryBufferPools::reserveBuffer(VkDeviceSize totalSize, VkD
 
         //debug(name, " : Created new Buffer ", bufferInfo->buffer.get(), " totalSize ", totalSize, " deviceSize = ", deviceSize);
 
+        // 如果缓冲区未满，添加到缓冲区池以便重用
         if (!bufferInfo->buffer->full())
         {
             //debug(name, "  inserting new Buffer into Context.bufferPools");
@@ -115,6 +143,7 @@ ref_ptr<BufferInfo> MemoryBufferPools::reserveBuffer(VkDeviceSize totalSize, VkD
 
     //debug(name, " : bufferInfo->offset = ", bufferInfo->offset);
 
+    // 获取缓冲区的内存需求并预留设备内存
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(*device, bufferInfo->buffer->vk(device->deviceID), &memRequirements);
 
@@ -127,6 +156,7 @@ ref_ptr<BufferInfo> MemoryBufferPools::reserveBuffer(VkDeviceSize totalSize, VkD
     }
 
     //debug(name, " : Allocated new buffer, MemoryBufferPools::reserveBuffer(", totalSize, ", ", alignment, ", ", bufferUsageFlags, ") ");
+    // 将缓冲区绑定到设备内存
     bufferInfo->buffer->bind(reservedMemorySlot.first, reservedMemorySlot.second);
 
     return bufferInfo;

@@ -16,6 +16,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建颜色混合状态对象（默认）
+// 颜色混合状态用于定义颜色混合的参数（逻辑操作、混合附件、混合常量等）
+// 默认创建一个颜色混合附件，混合禁用，写入所有颜色分量
 ColorBlendState::ColorBlendState()
 {
     VkPipelineColorBlendAttachmentState colorBlendAttachment = {
@@ -31,6 +34,9 @@ ColorBlendState::ColorBlendState()
     attachments.push_back(colorBlendAttachment);
 }
 
+// 拷贝构造函数：从另一个颜色混合状态对象创建新的颜色混合状态对象
+// cbs: 要拷贝的颜色混合状态对象
+// 拷贝逻辑操作启用标志、逻辑操作、颜色混合附件列表和混合常量
 ColorBlendState::ColorBlendState(const ColorBlendState& cbs) :
     Inherit(cbs),
     logicOpEnable(cbs.logicOpEnable),
@@ -40,15 +46,21 @@ ColorBlendState::ColorBlendState(const ColorBlendState& cbs) :
 {
 }
 
+// 构造函数：使用颜色混合附件列表创建颜色混合状态对象
+// colorBlendAttachments: 颜色混合附件列表（每个颜色附件对应一个渲染目标）
 ColorBlendState::ColorBlendState(const ColorBlendAttachments& colorBlendAttachments) :
     attachments(colorBlendAttachments)
 {
 }
 
+// 析构函数：销毁颜色混合状态对象
 ColorBlendState::~ColorBlendState()
 {
 }
 
+// 配置所有附件的混合设置
+// blendEnable: 是否启用混合
+// 如果启用，配置为Alpha混合模式（源Alpha，目标1-源Alpha）；如果禁用，配置为不混合
 void ColorBlendState::configureAttachments(bool blendEnable)
 {
     for (auto& attachment : attachments)
@@ -142,6 +154,10 @@ void ColorBlendState::write(Output& output) const
     output.write("blendConstants", blendConstants[0], blendConstants[1], blendConstants[2], blendConstants[3]);
 }
 
+// 应用颜色混合状态到图形管线创建信息
+// context: 编译上下文对象
+// pipelineInfo: 图形管线创建信息（输出参数）
+// 从临时内存分配颜色混合状态创建信息，填充逻辑操作、附件列表和混合常量，然后设置到管线创建信息中
 void ColorBlendState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipelineInfo) const
 {
     auto colorBlendState = context.scratchMemory->allocate<VkPipelineColorBlendStateCreateInfo>();

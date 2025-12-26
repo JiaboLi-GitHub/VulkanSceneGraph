@@ -15,10 +15,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建状态切换对象（默认）
+// 状态切换用于根据掩码条件性地记录状态命令（允许根据遍历掩码选择性地应用状态）
 StateSwitch::StateSwitch()
 {
 }
 
+// 拷贝构造函数：从另一个状态切换对象创建新的状态切换对象
+// rhs: 要拷贝的状态切换对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝子节点列表（每个子节点包含掩码和状态命令）
 StateSwitch::StateSwitch(const StateSwitch& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop)
 {
@@ -29,6 +35,10 @@ StateSwitch::StateSwitch(const StateSwitch& rhs, const CopyOp& copyop) :
     }
 }
 
+// 比较两个状态切换对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较子节点容器（比较每个子节点的掩码和状态命令）
 int StateSwitch::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -36,7 +46,7 @@ int StateSwitch::compare(const Object& rhs_object) const
 
     auto& rhs = static_cast<decltype(*this)>(rhs_object);
 
-    // compare the children vector
+    // 比较子节点向量
     if (children.size() < rhs.children.size()) return -1;
     if (children.size() > rhs.children.size()) return 1;
     if (children.empty()) return 0;
@@ -50,15 +60,22 @@ int StateSwitch::compare(const Object& rhs_object) const
     return 0;
 }
 
+// 编译状态切换
+// context: 编译上下文对象
+// 编译所有子节点的状态命令
 void StateSwitch::compile(Context& context)
 {
     for (auto& child : children) child.stateCommand->compile(context);
 }
 
+// 记录状态切换命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 根据遍历掩码和覆盖掩码条件性地记录子节点的状态命令
 void StateSwitch::record(CommandBuffer& commandBuffer) const
 {
     for (auto& child : children)
     {
+        // 如果掩码匹配，记录状态命令
         if ((commandBuffer.traversalMask & (commandBuffer.overrideMask | child.mask)) != MASK_OFF)
         {
             child.stateCommand->record(commandBuffer);

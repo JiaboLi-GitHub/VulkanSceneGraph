@@ -24,11 +24,17 @@ using namespace vsg;
 //
 // PagedLOD
 //
+// 构造函数：创建分页LOD节点
+// 分页LOD节点支持按需加载高分辨率子节点，用于大型场景的分页加载和内存管理
 PagedLOD::PagedLOD()
 {
     //    ++s_numPagedLODS;
 }
 
+// 拷贝构造函数：从另一个分页LOD节点创建新的分页LOD节点
+// rhs: 要拷贝的分页LOD节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝文件名、边界球和两个子节点（高分辨率子节点和低分辨率子节点）
 PagedLOD::PagedLOD(const PagedLOD& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     filename(rhs.filename),
@@ -40,12 +46,17 @@ PagedLOD::PagedLOD(const PagedLOD& rhs, const CopyOp& copyop) :
     children[1].node = copyop(rhs.children[1].node);
 }
 
+// 析构函数：销毁分页LOD节点
 PagedLOD::~PagedLOD()
 {
     //    --s_numPagedLODS;
     //    vsg::debug("s_numPagedLODS = ", s_numPagedLODS);
 }
 
+// 比较两个分页LOD节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、边界球、子节点向量（最小屏幕高度比例和节点指针）和文件名
 int PagedLOD::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -55,7 +66,7 @@ int PagedLOD::compare(const Object& rhs_object) const
 
     if ((result = compare_value(bound, rhs.bound)) != 0) return result;
 
-    // compare the children vector
+    // 比较子节点向量
     auto rhs_itr = rhs.children.begin();
     for (auto lhs_itr = children.begin(); lhs_itr != children.end(); ++lhs_itr, ++rhs_itr)
     {
@@ -66,16 +77,22 @@ int PagedLOD::compare(const Object& rhs_object) const
     return compare_value(filename, rhs.filename);
 }
 
+// 从输入流读取分页LOD节点对象
+// input: 输入流对象
+// 读取边界球、高分辨率子节点的文件名和最小屏幕高度比例、低分辨率子节点
+// 如果输入流有文件名，则解析高分辨率子节点的完整路径
 void PagedLOD::read(Input& input)
 {
     Node::read(input);
 
     input.read("bound", bound);
 
+    // 读取高分辨率子节点（从文件加载）
     input.read("child.minimumScreenHeightRatio", children[0].minimumScreenHeightRatio);
     input.read("child.filename", filename);
-    children[0].node = nullptr;
+    children[0].node = nullptr;  // 初始时高分辨率子节点未加载
 
+    // 如果输入流有文件名，解析完整路径
     if (input.filename)
     {
         auto path = filePath(input.filename);
@@ -85,12 +102,17 @@ void PagedLOD::read(Input& input)
         }
     }
 
+    // 读取低分辨率子节点（通常已存在）
     input.read("child.minimumScreenHeightRatio", children[1].minimumScreenHeightRatio);
     input.read("child.node", children[1].node);
 
+    // 保存读取选项（用于后续加载高分辨率子节点）
     options = Options::create_if(input.options, *input.options);
 }
 
+// 将分页LOD节点对象写入输出流
+// output: 输出流对象
+// 写入边界球、高分辨率子节点的文件名和最小屏幕高度比例、低分辨率子节点
 void PagedLOD::write(Output& output) const
 {
     Node::write(output);

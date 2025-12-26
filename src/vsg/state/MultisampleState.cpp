@@ -16,11 +16,17 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用采样数创建多采样状态对象
+// samples: 光栅化采样数（1、2、4、8等）
+// 多采样状态用于定义多重采样抗锯齿的参数
 MultisampleState::MultisampleState(VkSampleCountFlagBits samples) :
     rasterizationSamples(samples)
 {
 }
 
+// 拷贝构造函数：从另一个多采样状态对象创建新的多采样状态对象
+// ms: 要拷贝的多采样状态对象
+// 拷贝所有多采样参数（光栅化采样数、采样着色启用、最小采样着色、采样掩码、Alpha到覆盖、Alpha到一等）
 MultisampleState::MultisampleState(const MultisampleState& ms) :
     Inherit(ms),
     rasterizationSamples(ms.rasterizationSamples),
@@ -32,10 +38,15 @@ MultisampleState::MultisampleState(const MultisampleState& ms) :
 {
 }
 
+// 析构函数：销毁多采样状态对象
 MultisampleState::~MultisampleState()
 {
 }
 
+// 比较两个多采样状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、光栅化采样数、采样着色启用、最小采样着色、采样掩码容器、Alpha到覆盖启用和Alpha到一启用
 int MultisampleState::compare(const Object& rhs_object) const
 {
     int result = GraphicsPipelineState::compare(rhs_object);
@@ -95,6 +106,10 @@ void MultisampleState::write(Output& output) const
     output.writeValue<uint32_t>("alphaToOneEnable", alphaToOneEnable);
 }
 
+// 应用多采样状态到图形管线创建信息
+// context: 编译上下文对象
+// pipelineInfo: 图形管线创建信息（输出参数）
+// 从临时内存分配多采样状态创建信息，填充所有多采样参数，然后设置到管线创建信息中
 void MultisampleState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipelineInfo) const
 {
     auto multisampleState = context.scratchMemory->allocate<VkPipelineMultisampleStateCreateInfo>();

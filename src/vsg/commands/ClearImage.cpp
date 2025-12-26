@@ -15,6 +15,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 记录清除颜色图像命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdClearColorImage命令，用指定颜色清除颜色图像
 void ClearColorImage::record(CommandBuffer& commandBuffer) const
 {
     vkCmdClearColorImage(commandBuffer,
@@ -23,6 +26,9 @@ void ClearColorImage::record(CommandBuffer& commandBuffer) const
                          static_cast<uint32_t>(ranges.size()), ranges.data());
 }
 
+// 记录清除深度模板图像命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdClearDepthStencilImage命令，用指定值清除深度模板图像
 void ClearDepthStencilImage::record(CommandBuffer& commandBuffer) const
 {
     vkCmdClearDepthStencilImage(commandBuffer,

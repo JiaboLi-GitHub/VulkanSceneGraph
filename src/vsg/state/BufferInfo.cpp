@@ -22,15 +22,24 @@ using namespace vsg;
 //
 // vsg::BufferInfo
 //
+// 构造函数：创建缓冲区信息对象（默认）
+// 缓冲区信息用于描述缓冲区中的一段内存区域，包含缓冲区、偏移量和范围
 BufferInfo::BufferInfo()
 {
 }
 
+// 构造函数：使用数据对象创建缓冲区信息
+// in_data: 数据对象（将被转换为BufferInfo）
 BufferInfo::BufferInfo(Data* in_data) :
     data(in_data)
 {
 }
 
+// 构造函数：使用缓冲区、偏移量、范围和数据创建缓冲区信息
+// in_buffer: 缓冲区对象
+// in_offset: 缓冲区中的偏移量（字节）
+// in_range: 范围大小（字节）
+// in_data: 数据对象（可选）
 BufferInfo::BufferInfo(Buffer* in_buffer, VkDeviceSize in_offset, VkDeviceSize in_range, Data* in_data) :
     buffer(in_buffer),
     offset(in_offset),
@@ -39,11 +48,17 @@ BufferInfo::BufferInfo(Buffer* in_buffer, VkDeviceSize in_offset, VkDeviceSize i
 {
 }
 
+// 析构函数：销毁缓冲区信息对象
+// 释放缓冲区中的内存槽
 BufferInfo::~BufferInfo()
 {
     release();
 }
 
+// 克隆缓冲区信息对象
+// copyop: 拷贝操作参数
+// 返回: 克隆的对象
+// 如果数据被拷贝，创建新的BufferInfo；否则返回自身引用
 ref_ptr<Object> BufferInfo::clone(const CopyOp& copyop) const
 {
     auto new_data = copyop(data);
@@ -52,6 +67,11 @@ ref_ptr<Object> BufferInfo::clone(const CopyOp& copyop) const
     return BufferInfo::create(new_data);
 }
 
+// 比较两个缓冲区信息对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较数据对象（动态数据使用指针比较），然后比较缓冲区、偏移量和范围
+// 如果其中一个缓冲区未分配，则视为匹配（可以重用已分配的BufferInfo）
 int BufferInfo::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -59,18 +79,19 @@ int BufferInfo::compare(const Object& rhs_object) const
 
     auto& rhs = static_cast<decltype(*this)>(rhs_object);
 
+    // 对于动态数据，使用指针比较
     if (data != rhs.data && data && rhs.data)
     {
         if (data->dynamic() || rhs.data->dynamic())
         {
             if (data < rhs.data) return -1;
-            return 1; // from checks above it must be that data > rhs.data
+            return 1; // 从上面的检查可以确定 data > rhs.data
         }
     }
 
     if ((result = compare_pointer(data, rhs.data))) return result;
 
-    /// if one of less buffer is assigned treat as a match as data is the same, and we can reuse any BufferInfo that's been assigned.
+    /// 如果其中一个缓冲区未分配，则视为匹配，因为数据相同，可以重用任何已分配的BufferInfo
     if (!buffer || !rhs.buffer) return 0;
 
     if ((result = compare_pointer(buffer, rhs.buffer))) return result;
@@ -78,6 +99,8 @@ int BufferInfo::compare(const Object& rhs_object) const
     return compare_value(range, rhs.range);
 }
 
+// 释放缓冲区信息
+// 如果存在父BufferInfo，清空父引用；否则释放缓冲区中的内存槽
 void BufferInfo::release()
 {
     if (parent)
@@ -94,6 +117,8 @@ void BufferInfo::release()
     range = 0;
 }
 
+// 将数据复制到缓冲区（所有设备）
+// 为所有设备复制数据到缓冲区
 void BufferInfo::copyDataToBuffer()
 {
     if (!buffer) return;
@@ -104,6 +129,9 @@ void BufferInfo::copyDataToBuffer()
     }
 }
 
+// 将数据复制到缓冲区（指定设备）
+// deviceID: 设备ID
+// 将数据对象的内容复制到缓冲区的指定区域（需要主机可见内存）
 void BufferInfo::copyDataToBuffer(uint32_t deviceID)
 {
     if (!buffer) return;
@@ -111,17 +139,19 @@ void BufferInfo::copyDataToBuffer(uint32_t deviceID)
     DeviceMemory* dm = buffer->getDeviceMemory(deviceID);
     if (dm)
     {
+        // 检查内存是否支持直接映射
         if ((dm->getMemoryPropertyFlags() & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
         {
             warn("BufferInfo::copyDataToBuffer() cannot copy data. DeviceMemory does not support direct memory mapping.");
 
-            // you can use dynamic data updates provided by vsg::TransferTask or alternatively, you can implement the following steps:
-            // 1. allocate staging buffer
-            // 2. copy to staging buffer
-            // 3. transfer from staging buffer to device local buffer - use CopyAndReleaseBuffer
+            // 可以使用vsg::TransferTask提供的动态数据更新，或者实现以下步骤：
+            // 1. 分配临时缓冲区
+            // 2. 复制到临时缓冲区
+            // 3. 从临时缓冲区传输到设备本地缓冲区 - 使用CopyAndReleaseBuffer
             return;
         }
 
+        // 映射内存并复制数据
         void* buffer_data;
         VkResult result = dm->map(buffer->getMemoryOffset(deviceID) + offset, range, 0, &buffer_data);
         if (result != 0)
@@ -141,12 +171,18 @@ void BufferInfo::copyDataToBuffer(uint32_t deviceID)
 //
 // vsg::copyDataToStagingBuffer
 //
+// 将数据复制到临时缓冲区
+// context: 编译上下文对象
+// data: 要复制的数据对象
+// 返回: 包含数据的临时缓冲区信息对象
+// 从临时内存缓冲区池分配临时缓冲区，并将数据复制到其中
 ref_ptr<BufferInfo> vsg::copyDataToStagingBuffer(Context& context, const Data* data)
 {
     if (!data) return {};
 
     VkDeviceSize imageTotalSize = data->dataSize();
 
+    // 从临时内存缓冲区池分配临时缓冲区
     VkDeviceSize alignment = std::max(VkDeviceSize(4), VkDeviceSize(data->valueSize()));
     auto stagingBufferInfo = context.stagingMemoryBufferPools->reserveBuffer(imageTotalSize, alignment, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBufferInfo->data = const_cast<Data*>(data);
@@ -158,7 +194,7 @@ ref_ptr<BufferInfo> vsg::copyDataToStagingBuffer(Context& context, const Data* d
 
     if (!imageStagingMemory) return {};
 
-    // copy data to staging memory
+    // 将数据复制到临时内存
     imageStagingMemory->copy(imageStagingBuffer->getMemoryOffset(context.deviceID) + stagingBufferInfo->offset, imageTotalSize, data->dataPointer());
 
     debug("Creating imageStagingBuffer and memory size = ", imageTotalSize);

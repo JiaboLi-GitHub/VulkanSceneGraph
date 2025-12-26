@@ -15,10 +15,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建层节点
+// 层节点用于将子节点分配到特定的渲染bin中，支持分层渲染和排序
 Layer::Layer()
 {
 }
 
+// 拷贝构造函数：从另一个层节点创建新的层节点
+// rhs: 要拷贝的层节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝掩码、bin编号、值和子节点
 Layer::Layer(const Layer& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     mask(rhs.mask),
@@ -28,6 +34,10 @@ Layer::Layer(const Layer& rhs, const CopyOp& copyop) :
 {
 }
 
+// 构造函数：使用bin编号、值和子节点创建层节点
+// in_binNumber: bin编号（用于指定渲染顺序）
+// in_value: 排序值（用于在同一bin内排序）
+// in_child: 子节点（将被分配到指定的bin中）
 Layer::Layer(int32_t in_binNumber, double in_value, ref_ptr<Node> in_child) :
     binNumber(in_binNumber),
     value(in_value),
@@ -35,10 +45,15 @@ Layer::Layer(int32_t in_binNumber, double in_value, ref_ptr<Node> in_child) :
 {
 }
 
+// 析构函数：销毁层节点
 Layer::~Layer()
 {
 }
 
+// 比较两个层节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、掩码、bin编号、值和子节点
 int Layer::compare(const Object& rhs_object) const
 {
     int result = Node::compare(rhs_object);
@@ -51,6 +66,9 @@ int Layer::compare(const Object& rhs_object) const
     return compare_pointer(child, rhs.child);
 }
 
+// 从输入流读取层节点对象
+// input: 输入流对象
+// 读取掩码、bin编号、值和子节点
 void Layer::read(Input& input)
 {
     Node::read(input);
@@ -61,6 +79,9 @@ void Layer::read(Input& input)
     input.readObject("child", child);
 }
 
+// 将层节点对象写入输出流
+// output: 输出流对象
+// 写入掩码、bin编号、值和子节点
 void Layer::write(Output& output) const
 {
     Node::write(output);

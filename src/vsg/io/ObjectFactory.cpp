@@ -14,15 +14,22 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 获取对象工厂单例实例
+// 返回: 对象工厂实例的引用
+// 对象工厂用于根据类名创建对象（用于反序列化）
+// 注意：当前假设初始化不会是多线程的
 ref_ptr<ObjectFactory>& ObjectFactory::instance()
 {
-    // declare the ObjectFactory singleton as static to be initialized on first invocation of the instance() method.  Note, this currently assumes that initialization won't be multi-threaded.
+    // 将对象工厂单例声明为静态，在首次调用instance()方法时初始化。注意，当前假设初始化不会是多线程的
     static ref_ptr<ObjectFactory> s_ObjectFactory(new ObjectFactory);
     return s_ObjectFactory;
 }
 
+// 构造函数：创建对象工厂对象
+// 注册所有VSG对象类型的创建函数，用于反序列化时根据类名创建对象
 ObjectFactory::ObjectFactory()
 {
+    // 注册nullptr的特殊处理
     _createMap["nullptr"] = []() { return ref_ptr<Object>(); };
 
     // cores
@@ -345,6 +352,10 @@ ObjectFactory::~ObjectFactory()
 {
 }
 
+// 根据类名创建对象
+// className: 类名（用于反序列化）
+// 返回: 创建的对象，如果类名未注册则返回空指针
+// 在创建映射中查找类名，如果找到则调用对应的创建函数
 vsg::ref_ptr<vsg::Object> ObjectFactory::create(const std::string& className)
 {
     if (auto itr = _createMap.find(className); itr != _createMap.end())

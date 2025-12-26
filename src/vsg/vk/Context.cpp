@@ -34,9 +34,15 @@ using namespace vsg;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
-// BuildAccelerationStructureCommand
+// BuildAccelerationStructureCommand - 构建加速结构命令（用于光线追踪）
 //
 
+// 构造函数：创建构建加速结构命令对象
+// device: 设备对象
+// info: 加速结构构建几何信息
+// structure: 加速结构句柄
+// primitiveCounts: 图元计数列表
+// 加速结构用于光线追踪，存储场景几何信息以加速光线-几何相交测试
 BuildAccelerationStructureCommand::BuildAccelerationStructureCommand(Device* device, const VkAccelerationStructureBuildGeometryInfoKHR& info, const VkAccelerationStructureKHR& structure, const std::vector<uint32_t>& primitiveCounts) :
     _device(device),
     _accelerationStructureInfo(info),
@@ -44,8 +50,10 @@ BuildAccelerationStructureCommand::BuildAccelerationStructureCommand(Device* dev
 {
     _accelerationStructureInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
     _accelerationStructureInfo.dstAccelerationStructure = _accelerationStructure;
+    // 复制几何信息（因为原始指针可能失效）
     _accelerationStructureGeometries = std::vector<VkAccelerationStructureGeometryKHR>(_accelerationStructureInfo.pGeometries, _accelerationStructureInfo.pGeometries + _accelerationStructureInfo.geometryCount);
     _accelerationStructureInfo.pGeometries = _accelerationStructureGeometries.data();
+    // 为每个图元计数创建构建范围信息
     for (const auto c : primitiveCounts)
     {
         _accelerationStructureBuildRangeInfos.emplace_back();
@@ -56,6 +64,9 @@ BuildAccelerationStructureCommand::BuildAccelerationStructureCommand(Device* dev
     }
 }
 
+// 记录命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 将构建加速结构的命令记录到命令缓冲区，并在之后插入内存屏障
 void BuildAccelerationStructureCommand::record(CommandBuffer& commandBuffer) const
 {
     auto extensions = commandBuffer.getDevice()->getExtensions();
@@ -66,6 +77,7 @@ void BuildAccelerationStructureCommand::record(CommandBuffer& commandBuffer) con
         &_accelerationStructureInfo,
         &rangeInfos);
 
+    // 插入内存屏障以确保加速结构构建完成
     VkMemoryBarrier memoryBarrier;
     memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
     memoryBarrier.pNext = nullptr;
@@ -75,6 +87,9 @@ void BuildAccelerationStructureCommand::record(CommandBuffer& commandBuffer) con
     vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &memoryBarrier, 0, 0, 0, 0);
 }
 
+// 设置临时缓冲区
+// scratchBuffer: 临时缓冲区对象
+// 设置用于构建加速结构的临时缓冲区，并获取其设备地址
 void BuildAccelerationStructureCommand::setScratchBuffer(ref_ptr<Buffer> scratchBuffer)
 {
     _scratchBuffer = scratchBuffer;
@@ -85,8 +100,12 @@ void BuildAccelerationStructureCommand::setScratchBuffer(ref_ptr<Buffer> scratch
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //
-// vsg::Context
+// vsg::Context - 编译上下文，管理资源池和命令缓冲区
 //
+// 构造函数：创建编译上下文对象
+// in_device: 设备对象
+// in_resourceRequirements: 资源需求
+// 编译上下文用于管理场景图编译过程中的资源分配和命令记录
 Context::Context(Device* in_device, const ResourceRequirements& in_resourceRequirements) :
     deviceID(in_device->deviceID),
     device(in_device),
@@ -98,6 +117,7 @@ Context::Context(Device* in_device, const ResourceRequirements& in_resourceRequi
 
     vsg::debug("Context::Context() ", this);
 
+    // 获取或创建设备内存缓冲区池（用于设备本地内存）
     deviceMemoryBufferPools = device->deviceMemoryBufferPools.ref_ptr();
     if (!deviceMemoryBufferPools)
     {
@@ -109,6 +129,7 @@ Context::Context(Device* in_device, const ResourceRequirements& in_resourceRequi
         vsg::debug("Context::Context() reusing deviceMemoryBufferPools = ", deviceMemoryBufferPools);
     }
 
+    // 获取或创建暂存内存缓冲区池（用于主机可见内存，用于数据传输）
     stagingMemoryBufferPools = device->stagingMemoryBufferPools.ref_ptr();
     if (!stagingMemoryBufferPools)
     {
@@ -120,6 +141,7 @@ Context::Context(Device* in_device, const ResourceRequirements& in_resourceRequi
         vsg::debug("Context::Context() reusing stagingMemoryBufferPools = ", stagingMemoryBufferPools);
     }
 
+    // 获取或创建描述符池（用于描述符集分配）
     descriptorPools = device->descriptorPools.ref_ptr();
     if (!descriptorPools)
     {
@@ -131,6 +153,7 @@ Context::Context(Device* in_device, const ResourceRequirements& in_resourceRequi
         vsg::debug("Context::Context() reusing descriptorPools = ", descriptorPools);
     }
 
+    // 如果资源需求要求动态视口状态，添加默认的视口和裁剪动态状态
     if ((resourceRequirements.viewportStateHint & DYNAMIC_VIEWPORTSTATE))
     {
         defaultPipelineStates.push_back(DynamicState::create(VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR));
@@ -166,6 +189,9 @@ Context::~Context()
     }
 }
 
+// 获取或创建命令缓冲区
+// 返回: 命令缓冲区对象
+// 如果命令缓冲区不存在，从命令池分配一个新的
 ref_ptr<CommandBuffer> Context::getOrCreateCommandBuffer()
 {
     if (!commandBuffer)
@@ -176,6 +202,9 @@ ref_ptr<CommandBuffer> Context::getOrCreateCommandBuffer()
     return commandBuffer;
 }
 
+// 获取或创建着色器编译器
+// 返回: 着色器编译器指针
+// 如果着色器编译器不存在，创建一个新的并设置Vulkan版本
 ShaderCompiler* Context::getOrCreateShaderCompiler()
 {
     if (shaderCompiler) return shaderCompiler;
@@ -193,6 +222,9 @@ ShaderCompiler* Context::getOrCreateShaderCompiler()
     return shaderCompiler;
 }
 
+// 预留资源
+// requirements: 资源需求
+// 根据资源需求预留描述符池等资源
 void Context::reserve(const ResourceRequirements& requirements)
 {
     CPU_INSTRUMENTATION_L2_NC(instrumentation, "Context reserve", COLOR_COMPILE)
@@ -202,11 +234,19 @@ void Context::reserve(const ResourceRequirements& requirements)
     descriptorPools->reserve(requirements);
 }
 
+// 分配描述符集
+// descriptorSetLayout: 描述符集布局
+// 返回: 描述符集实现对象
+// 从描述符池分配一个描述符集
 ref_ptr<DescriptorSet::Implementation> Context::allocateDescriptorSet(DescriptorSetLayout* descriptorSetLayout)
 {
     return descriptorPools->allocateDescriptorSet(descriptorSetLayout);
 }
 
+// 复制数据到图像
+// data: 源数据对象
+// dest: 目标图像信息
+// 将数据复制到图像，使用暂存缓冲区进行传输
 void Context::copy(ref_ptr<Data> data, ref_ptr<ImageInfo> dest)
 {
     CPU_INSTRUMENTATION_L2_NC(instrumentation, "Context copy", COLOR_COMPILE)
@@ -222,6 +262,11 @@ void Context::copy(ref_ptr<Data> data, ref_ptr<ImageInfo> dest)
     copyImageCmd->copy(data, dest);
 }
 
+// 复制数据到图像（带mipmap级别）
+// data: 源数据对象
+// dest: 目标图像信息
+// numMipMapLevels: mipmap级别数量
+// 将数据复制到图像，支持多个mipmap级别
 void Context::copy(ref_ptr<Data> data, ref_ptr<ImageInfo> dest, uint32_t numMipMapLevels)
 {
     CPU_INSTRUMENTATION_L2_NC(instrumentation, "Context copy", COLOR_COMPILE)
@@ -237,6 +282,10 @@ void Context::copy(ref_ptr<Data> data, ref_ptr<ImageInfo> dest, uint32_t numMipM
     copyImageCmd->copy(data, dest, numMipMapLevels);
 }
 
+// 复制缓冲区
+// src: 源缓冲区信息
+// dest: 目标缓冲区信息
+// 将数据从一个缓冲区复制到另一个缓冲区
 void Context::copy(ref_ptr<BufferInfo> src, ref_ptr<BufferInfo> dest)
 {
     CPU_INSTRUMENTATION_L2_NC(instrumentation, "Context copy", COLOR_COMPILE)
@@ -252,12 +301,16 @@ void Context::copy(ref_ptr<BufferInfo> src, ref_ptr<BufferInfo> dest)
     copyBufferCmd->add(src, dest);
 }
 
+// 记录命令到命令缓冲区并提交
+// 返回: 如果有命令记录则返回true
+// 将所有待处理的命令记录到命令缓冲区，然后提交到图形队列执行
 bool Context::record()
 {
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "Context record", COLOR_COMPILE)
 
     if (commands.empty() && buildAccelerationStructureCommands.empty()) return false;
 
+    // 获取或创建围栏（用于同步）
     if (!fence)
     {
         fence = vsg::Fence::create(device);
@@ -269,6 +322,7 @@ bool Context::record()
 
     getOrCreateCommandBuffer();
 
+    // 开始记录命令缓冲区
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -278,12 +332,12 @@ bool Context::record()
     {
         COMMAND_BUFFER_INSTRUMENTATION(instrumentation, *commandBuffer, "Context record", COLOR_COMPILE)
 
-        // issue commands of interest
+        // 记录所有命令
         {
             for (auto& command : commands) command->record(*commandBuffer);
         }
 
-        // create scratch buffer and issue build acceleration structure commands
+        // 创建临时缓冲区并记录构建加速结构命令
         if (scratchBufferSize > 0)
         {
             VkMemoryAllocateFlagsInfo memFlags = {};
@@ -301,6 +355,7 @@ bool Context::record()
 
     vkEndCommandBuffer(*commandBuffer);
 
+    // 准备提交信息
     VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     VkSubmitInfo submitInfo = {};
@@ -321,6 +376,7 @@ bool Context::record()
         submitInfo.pSignalSemaphores = nullptr;
     }
 
+    // 提交到图形队列
     graphicsQueue->submit(submitInfo, fence);
 
     requiresWaitForCompletion = true;
@@ -328,6 +384,8 @@ bool Context::record()
     return true;
 }
 
+// 等待命令执行完成
+// 等待所有提交的命令执行完成，然后清理命令列表
 void Context::waitForCompletion()
 {
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "Context waitForCompletion", COLOR_COMPILE)
@@ -339,7 +397,7 @@ void Context::waitForCompletion()
 
     // auto start_point = vsg::clock::now();
 
-    // we must wait for the queue to empty before we can safely clean up the commandBuffer
+    // 必须等待队列清空后才能安全清理命令缓冲区
     uint64_t timeout = 1000000000;
 
     VkResult result;

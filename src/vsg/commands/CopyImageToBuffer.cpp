@@ -15,10 +15,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建图像到缓冲区复制命令（默认）
+// 图像到缓冲区复制命令用于将图像数据复制到缓冲区
 CopyImageToBuffer::CopyImageToBuffer()
 {
 }
 
+// 记录图像到缓冲区复制命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdCopyImageToBuffer命令，从图像复制数据到缓冲区
 void CopyImageToBuffer::record(CommandBuffer& commandBuffer) const
 {
     vkCmdCopyImageToBuffer(

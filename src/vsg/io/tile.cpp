@@ -36,28 +36,45 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用瓦片数据库设置和选项创建瓦片读取器对象
+// in_settings: 瓦片数据库设置对象
+// in_options: 选项对象
+// 瓦片读取器用于读取分层的瓦片数据库（如地图瓦片、地形瓦片等）
 tile::tile(ref_ptr<TileDatabaseSettings> in_settings, ref_ptr<const Options> in_options) :
     settings(in_settings)
 {
     init(in_options);
 }
 
+// 计算纬度、经度和海拔高度
+// src: 源坐标（投影坐标）
+// 返回: 纬度、经度、海拔高度
+// 根据投影类型（EPSG:3857/球面墨卡托或其他）将投影坐标转换为地理坐标
 vsg::dvec3 tile::computeLatitudeLongitudeAltitude(const vsg::dvec3& src) const
 {
     if (settings->projection == "EPSG:3857" || settings->projection == "spherical-mercator")
     {
+        // 球面墨卡托投影：需要反投影计算
         double n = 2.0 * vsg::radians(src.y);
         double adjustedLatitude = vsg::degrees(atan(0.5 * (exp(n) - exp(-n))));
         return vsg::dvec3(adjustedLatitude, src.x, src.z);
     }
     else
     {
+        // 其他投影：直接交换x和y
         return vsg::dvec3(src.y, src.x, src.z);
     }
 }
 
+// 计算瓦片范围
+// x: 瓦片X坐标
+// y: 瓦片Y坐标
+// level: 瓦片层级
+// 返回: 瓦片的边界框
+// 根据瓦片坐标和层级计算瓦片在投影空间中的范围
 vsg::dbox tile::computeTileExtents(uint32_t x, uint32_t y, uint32_t level) const
 {
+    // 根据层级计算缩放因子
     double multiplier = pow(0.5, double(level));
     double tileWidth = multiplier * (settings->extents.max.x - settings->extents.min.x) / double(settings->noX);
     double tileHeight = multiplier * (settings->extents.max.y - settings->extents.min.y) / double(settings->noY);
@@ -65,20 +82,30 @@ vsg::dbox tile::computeTileExtents(uint32_t x, uint32_t y, uint32_t level) const
     vsg::dbox tile_extents;
     if (settings->originTopLeft)
     {
+        // 原点在左上角（Y轴向下）
         vsg::dvec3 origin(settings->extents.min.x, settings->extents.max.y, settings->extents.min.z);
         tile_extents.min = origin + vsg::dvec3(double(x) * tileWidth, -double(y + 1) * tileHeight, 0.0);
         tile_extents.max = origin + vsg::dvec3(double(x + 1) * tileWidth, -double(y) * tileHeight, 1.0);
     }
     else
     {
+        // 原点在左下角（Y轴向上）
         tile_extents.min = settings->extents.min + vsg::dvec3(double(x) * tileWidth, double(y) * tileHeight, 0.0);
         tile_extents.max = settings->extents.min + vsg::dvec3(double(x + 1) * tileWidth, double(y + 1) * tileHeight, 1.0);
     }
     return tile_extents;
 }
 
+// 获取瓦片路径
+// src: 源路径模板
+// x: 瓦片X坐标
+// y: 瓦片Y坐标
+// level: 瓦片层级
+// 返回: 替换了占位符的瓦片路径
+// 将路径模板中的占位符（{x}、{y}、{z}、{quadkey}等）替换为实际的瓦片坐标
 vsg::Path tile::getTilePath(const vsg::Path& src, uint32_t x, uint32_t y, uint32_t level) const
 {
+    // Lambda函数：替换路径中的占位符
     auto replace = [](Path& path, const std::string& match, uint32_t value) {
         std::stringstream sstr;
         sstr << value;
@@ -87,10 +114,12 @@ vsg::Path tile::getTilePath(const vsg::Path& src, uint32_t x, uint32_t y, uint32
     };
 
     vsg::Path path = src;
+    // 如果路径包含{quadkey}占位符，计算四叉树键值
     if (auto quadkeyPos = path.find("{quadkey}"); quadkeyPos != Path::npos)
     {
         std::string quadkey;
         uint32_t mask = 1 << level;
+        // 从最高位到最低位生成四叉树键值
         for (uint32_t i = level + 1; i > 0; --i)
         {
             char digit = '0';
@@ -100,10 +129,11 @@ vsg::Path tile::getTilePath(const vsg::Path& src, uint32_t x, uint32_t y, uint32
             mask = mask >> 1;
         }
 
-        path.replace(quadkeyPos, 9, quadkey); // 9 is char length of {quadkey}
+        path.replace(quadkeyPos, 9, quadkey); // 9是{quadkey}的字符长度
     }
     else
     {
+        // 替换其他占位符
         replace(path, "{z}", level);
         replace(path, "{z+1}", level + 1);
         replace(path, "{z-1}", level > 1 ? level - 1 : 0);
@@ -115,6 +145,11 @@ vsg::Path tile::getTilePath(const vsg::Path& src, uint32_t x, uint32_t y, uint32
     return path;
 }
 
+// 从文件读取瓦片对象
+// filename: 文件名路径（格式：root.tile或"x y lod.tile"）
+// options: 选项对象
+// 返回: 读取的瓦片对象，如果失败则返回空指针
+// 根据文件名判断是读取根瓦片还是子瓦片
 vsg::ref_ptr<vsg::Object> tile::read(const vsg::Path& filename, vsg::ref_ptr<const vsg::Options> options) const
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "tile read", COLOR_READ);
@@ -124,13 +159,16 @@ vsg::ref_ptr<vsg::Object> tile::read(const vsg::Path& filename, vsg::ref_ptr<con
 
     if (!options) return {};
 
+    // 提取瓦片信息（去掉.tile扩展名）
     auto tile_info = filename.substr(0, filename.length() - 5);
     if (tile_info == "root")
     {
+        // 读取根瓦片（第0层）
         return read_root(options);
     }
     else
     {
+        // 解析子瓦片坐标和层级
         std::basic_stringstream<vsg::Path::value_type> sstr(tile_info);
 
         uint32_t x, y, lod;

@@ -14,10 +14,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建开始查询命令（默认）
+// 开始查询命令用于开始记录查询统计信息（如遮挡查询、时间戳等）
 BeginQuery::BeginQuery()
 {
 }
 
+// 构造函数：使用查询池、查询索引和标志创建开始查询命令
+// pool: 查询池对象
+// in_query: 查询索引
+// in_flags: 查询控制标志（如VK_QUERY_CONTROL_PRECISE_BIT用于遮挡查询）
 BeginQuery::BeginQuery(ref_ptr<QueryPool> pool, uint32_t in_query, VkQueryControlFlags in_flags) :
     queryPool(pool),
     query(in_query),
@@ -25,6 +31,9 @@ BeginQuery::BeginQuery(ref_ptr<QueryPool> pool, uint32_t in_query, VkQueryContro
 {
 }
 
+// 从输入流读取开始查询命令对象
+// input: 输入流对象
+// 读取查询池、查询索引和标志
 void BeginQuery::read(Input& input)
 {
     Command::read(input);
@@ -34,6 +43,9 @@ void BeginQuery::read(Input& input)
     input.readValue<uint32_t>("flags", flags);
 }
 
+// 将开始查询命令对象写入输出流
+// output: 输出流对象
+// 写入查询池、查询索引和标志
 void BeginQuery::write(Output& output) const
 {
     Command::write(output);
@@ -43,11 +55,17 @@ void BeginQuery::write(Output& output) const
     output.writeValue<uint32_t>("flags", flags);
 }
 
+// 编译开始查询命令
+// context: 编译上下文对象
+// 编译查询池对象
 void BeginQuery::compile(Context& context)
 {
     if (queryPool) queryPool->compile(context);
 }
 
+// 记录开始查询命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdBeginQuery命令，开始记录查询
 void BeginQuery::record(CommandBuffer& commandBuffer) const
 {
     if (!queryPool) return;

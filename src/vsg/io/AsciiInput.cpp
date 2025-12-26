@@ -18,12 +18,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用输入流、对象工厂和选项创建ASCII输入对象
+// input: 输入流对象
+// in_objectFactory: 对象工厂对象（用于创建反序列化的对象）
+// in_options: 选项对象
+// ASCII输入用于从ASCII格式的输入流读取VSG对象的序列化数据
 AsciiInput::AsciiInput(std::istream& input, ref_ptr<ObjectFactory> in_objectFactory, ref_ptr<const Options> in_options) :
     Input(in_objectFactory, in_options),
     _input(input)
 {
 }
 
+// 匹配属性名称
+// propertyName: 期望的属性名称
+// 返回: 如果匹配成功则返回true
+// 从输入流读取属性名称并与期望的名称进行比较
 bool AsciiInput::matchPropertyName(const char* propertyName)
 {
     _input >> _readPropertyName;
@@ -35,6 +44,9 @@ bool AsciiInput::matchPropertyName(const char* propertyName)
     return true;
 }
 
+// 读取对象ID
+// 返回: 可选对象ID（如果找到ID则返回true和ID值，否则返回false）
+// 从输入流读取"id=数字"格式的对象ID
 AsciiInput::OptionalObjectID AsciiInput::objectID()
 {
     std::string token;
@@ -53,6 +65,9 @@ AsciiInput::OptionalObjectID AsciiInput::objectID()
     }
 }
 
+// 读取字符串（内部方法）
+// value: 输出参数，用于存储读取的字符串
+// 支持引号字符串（处理转义字符）和普通字符串
 void AsciiInput::_read(std::string& value)
 {
     value.clear();
@@ -61,6 +76,7 @@ void AsciiInput::_read(std::string& value)
     _input >> c;
     if (_input.good())
     {
+        // 如果以引号开始，读取引号字符串（处理转义）
         if (c == '"')
         {
             _input.get(c);
@@ -90,11 +106,16 @@ void AsciiInput::_read(std::string& value)
         }
         else
         {
+            // 普通字符串，使用流操作符读取
             _input >> value;
         }
     }
 }
 
+// 读取字符串数组
+// num: 要读取的字符串数量
+// value: 字符串数组指针
+// 读取指定数量的字符串
 void AsciiInput::read(size_t num, std::string* value)
 {
     if (num == 1)
@@ -110,6 +131,9 @@ void AsciiInput::read(size_t num, std::string* value)
     }
 }
 
+// 读取宽字符串（内部方法）
+// value: 输出参数，用于存储读取的宽字符串
+// 先读取UTF-8字符串，然后转换为宽字符串
 void AsciiInput::_read(std::wstring& value)
 {
     std::string string_value;
@@ -117,6 +141,10 @@ void AsciiInput::_read(std::wstring& value)
     convert_utf(string_value, value);
 }
 
+// 读取宽字符串数组
+// num: 要读取的宽字符串数量
+// value: 宽字符串数组指针
+// 读取指定数量的宽字符串
 void AsciiInput::read(size_t num, std::wstring* value)
 {
     if (num == 1)
@@ -132,6 +160,10 @@ void AsciiInput::read(size_t num, std::wstring* value)
     }
 }
 
+// 读取路径数组
+// num: 要读取的路径数量
+// value: 路径数组指针
+// 读取指定数量的路径（先读取字符串，然后转换为路径）
 void AsciiInput::read(size_t num, Path* value)
 {
     if (num == 1)
@@ -151,6 +183,9 @@ void AsciiInput::read(size_t num, Path* value)
     }
 }
 
+// 读取对象
+// 返回: 读取的对象，如果失败则返回空指针
+// 从ASCII输入流读取对象，支持对象ID引用和递归读取
 vsg::ref_ptr<vsg::Object> AsciiInput::read()
 {
     auto result = objectID();
@@ -159,6 +194,7 @@ vsg::ref_ptr<vsg::Object> AsciiInput::read()
         ObjectID id = result.second;
         //debug("   matched result=", id);
 
+        // 如果对象ID已存在，返回已读取的对象（处理引用）
         if (auto itr = objectIDMap.find(id); itr != objectIDMap.end())
         {
             //debug("Returning existing object ", itr->second);
@@ -166,6 +202,7 @@ vsg::ref_ptr<vsg::Object> AsciiInput::read()
         }
         else
         {
+            // 读取类名并创建新对象
             std::string className;
             _input >> className;
 
@@ -177,12 +214,15 @@ vsg::ref_ptr<vsg::Object> AsciiInput::read()
                 objectIDMap[id] = object;
                 if (object)
                 {
+                    // 匹配开始大括号
                     matchPropertyName("{");
 
+                    // 递归读取对象内容
                     object->read(*this);
 
                     //debug("Loaded object, assigning to objectIDMap.", object);
 
+                    // 匹配结束大括号
                     matchPropertyName("}");
                 }
                 else

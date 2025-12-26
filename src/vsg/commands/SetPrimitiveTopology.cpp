@@ -15,11 +15,17 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用图元拓扑创建设置图元拓扑命令
+// in_topology: Vulkan图元拓扑类型（如点、线、三角形等）
+// 设置图元拓扑命令用于动态设置图元拓扑类型（需要VK_EXT_extended_dynamic_state扩展）
 SetPrimitiveTopology::SetPrimitiveTopology(VkPrimitiveTopology in_topology) :
     topology(in_topology)
 {
 }
 
+// 从输入流读取设置图元拓扑命令对象
+// input: 输入流对象
+// 读取图元拓扑类型
 void SetPrimitiveTopology::read(Input& input)
 {
     Command::read(input);
@@ -27,6 +33,9 @@ void SetPrimitiveTopology::read(Input& input)
     input.readValue<uint32_t>("topology", topology);
 }
 
+// 将设置图元拓扑命令对象写入输出流
+// output: 输出流对象
+// 写入图元拓扑类型
 void SetPrimitiveTopology::write(Output& output) const
 {
     Command::write(output);
@@ -34,6 +43,9 @@ void SetPrimitiveTopology::write(Output& output) const
     output.writeValue<uint32_t>("topology", topology);
 }
 
+// 记录设置图元拓扑命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 检查扩展是否可用，如果可用则执行vkCmdSetPrimitiveTopology命令
 void SetPrimitiveTopology::record(CommandBuffer& commandBuffer) const
 {
     auto extensions = commandBuffer.getDevice()->getExtensions();

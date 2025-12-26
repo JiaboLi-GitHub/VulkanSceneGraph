@@ -15,6 +15,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 比较两个索引绘制命令对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较绘制参数区域（索引数量、首实例）
 int DrawIndexed::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -24,6 +28,9 @@ int DrawIndexed::compare(const Object& rhs_object) const
     return compare_region(indexCount, firstInstance, rhs.indexCount);
 }
 
+// 从输入流读取索引绘制命令对象
+// input: 输入流对象
+// 读取绘制参数：索引数量、实例数量、首索引、顶点偏移、首实例
 void DrawIndexed::read(Input& input)
 {
     Command::read(input);
@@ -35,6 +42,9 @@ void DrawIndexed::read(Input& input)
     input.read("firstInstance", firstInstance);
 }
 
+// 将索引绘制命令对象写入输出流
+// output: 输出流对象
+// 写入绘制参数：索引数量、实例数量、首索引、顶点偏移、首实例
 void DrawIndexed::write(Output& output) const
 {
     Command::write(output);

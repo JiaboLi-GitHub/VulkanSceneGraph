@@ -15,10 +15,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建图像复制命令（默认）
+// 图像复制命令用于在相同格式的图像之间进行像素级复制
 CopyImage::CopyImage()
 {
 }
 
+// 记录图像复制命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdCopyImage命令，从源图像复制到目标图像（格式必须相同）
 void CopyImage::record(CommandBuffer& commandBuffer) const
 {
     vkCmdCopyImage(

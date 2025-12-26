@@ -15,17 +15,25 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建设置视口命令（默认）
+// 初始化首视口索引为0
 SetViewport::SetViewport() :
     firstViewport(0)
 {
 }
 
+// 构造函数：使用首视口索引和视口列表创建设置视口命令
+// in_firstViewport: 首视口索引（从哪个视口开始设置）
+// in_viewports: 视口列表（包含x、y、width、height、minDepth、maxDepth）
 SetViewport::SetViewport(uint32_t in_firstViewport, const Viewports& in_viewports) :
     firstViewport(in_firstViewport),
     viewports(in_viewports)
 {
 }
 
+// 记录设置视口命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdSetViewport命令，设置视口状态
 void SetViewport::record(CommandBuffer& commandBuffer) const
 {
     vkCmdSetViewport(commandBuffer, firstViewport, static_cast<uint32_t>(viewports.size()), viewports.data());

@@ -22,10 +22,16 @@ using namespace vsg;
 //
 // DescriptorSetLayout
 //
+// 构造函数：创建描述符集布局对象（默认）
+// 描述符集布局用于定义描述符集的结构（绑定点、类型、数量等）
 DescriptorSetLayout::DescriptorSetLayout()
 {
 }
 
+// 拷贝构造函数：从另一个描述符集布局对象创建新的描述符集布局对象
+// rhs: 要拷贝的描述符集布局对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝创建标志、绑定列表和绑定标志列表
 DescriptorSetLayout::DescriptorSetLayout(const DescriptorSetLayout& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     createFlags(rhs.createFlags),
@@ -34,15 +40,25 @@ DescriptorSetLayout::DescriptorSetLayout(const DescriptorSetLayout& rhs, const C
 {
 }
 
+// 构造函数：使用描述符集布局绑定列表创建描述符集布局对象
+// descriptorSetLayoutBindings: 描述符集布局绑定列表
 DescriptorSetLayout::DescriptorSetLayout(const DescriptorSetLayoutBindings& descriptorSetLayoutBindings) :
     bindings(descriptorSetLayoutBindings)
 {
 }
 
+// 析构函数：销毁描述符集布局对象
 DescriptorSetLayout::~DescriptorSetLayout()
 {
 }
 
+// 添加绑定到描述符集布局
+// binding: 绑定点索引
+// descriptorType: 描述符类型（统一缓冲区、采样器等）
+// descriptorCount: 描述符数量（用于数组）
+// stageFlags: 着色器阶段标志（指定哪些着色器阶段可以访问）
+// flags: 绑定标志（如动态描述符、部分更新等）
+// 添加一个描述符绑定到布局，如果提供了绑定标志则记录
 void DescriptorSetLayout::addBinding(uint32_t binding, VkDescriptorType descriptorType, uint32_t descriptorCount, VkShaderStageFlags stageFlags, VkDescriptorBindingFlags flags)
 {
     VkDescriptorSetLayoutBinding layoutBinding = {};
@@ -53,6 +69,7 @@ void DescriptorSetLayout::addBinding(uint32_t binding, VkDescriptorType descript
     layoutBinding.pImmutableSamplers = nullptr;
     bindings.push_back(layoutBinding);
 
+    // 如果提供了绑定标志，记录它
     if (flags != 0)
     {
         if (binding >= bindingFlags.size()) bindingFlags.resize(binding + 1, 0);
@@ -60,19 +77,25 @@ void DescriptorSetLayout::addBinding(uint32_t binding, VkDescriptorType descript
     }
 }
 
+// 获取描述符池大小
+// descriptorPoolSizes: 输出参数，用于填充描述符池大小列表
+// 根据绑定列表计算所需的描述符池大小（按类型分组并累加数量）
 void DescriptorSetLayout::getDescriptorPoolSizes(DescriptorPoolSizes& descriptorPoolSizes)
 {
     for (auto& binding : bindings)
     {
+        // 查找是否已有相同类型的描述符池大小条目
         auto itr = descriptorPoolSizes.begin();
         for (; itr != descriptorPoolSizes.end(); ++itr)
         {
             if (itr->type == binding.descriptorType)
             {
+                // 累加描述符数量
                 itr->descriptorCount += binding.descriptorCount;
                 break;
             }
         }
+        // 如果没有找到，添加新条目
         if (itr == descriptorPoolSizes.end())
         {
             descriptorPoolSizes.emplace_back(VkDescriptorPoolSize{binding.descriptorType, binding.descriptorCount});
@@ -141,6 +164,9 @@ void DescriptorSetLayout::write(Output& output) const
     }
 }
 
+// 编译描述符集布局
+// context: 编译上下文对象
+// 创建Vulkan描述符集布局对象
 void DescriptorSetLayout::compile(Context& context)
 {
     if (!_implementation[context.deviceID]) _implementation[context.deviceID] = DescriptorSetLayout::Implementation::create(context.device, createFlags, bindings, bindingFlags);
@@ -150,15 +176,23 @@ void DescriptorSetLayout::compile(Context& context)
 //
 // DescriptorSetLayout::Implementation
 //
+// 实现类构造函数：创建描述符集布局实现对象
+// device: Vulkan设备对象
+// createFlags: 创建标志
+// descriptorSetLayoutBindings: 描述符集布局绑定列表
+// descriptorSetLayoutBindingFlags: 描述符集布局绑定标志列表
+// 设置描述符集布局创建信息，如果提供了绑定标志则设置扩展结构，然后创建Vulkan描述符集布局对象
 DescriptorSetLayout::Implementation::Implementation(Device* device, VkDescriptorSetLayoutCreateFlags createFlags, const DescriptorSetLayoutBindings& descriptorSetLayoutBindings, const DescriptorSetLayoutBindingFlags& descriptorSetLayoutBindingFlags) :
     _device(device)
 {
+    // 设置描述符集布局创建信息
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size());
     layoutInfo.pBindings = descriptorSetLayoutBindings.data();
     layoutInfo.flags = createFlags;
 
+    // 如果提供了绑定标志，设置扩展结构
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsCreateInfo = {};
     if (descriptorSetLayoutBindingFlags.empty())
     {
@@ -172,12 +206,15 @@ DescriptorSetLayout::Implementation::Implementation(Device* device, VkDescriptor
         layoutInfo.pNext = &bindingFlagsCreateInfo;
     }
 
+    // 创建Vulkan描述符集布局
     if (VkResult result = vkCreateDescriptorSetLayout(*device, &layoutInfo, _device->getAllocationCallbacks(), &_descriptorSetLayout); result != VK_SUCCESS)
     {
         throw Exception{"Error: Failed to create DescriptorSetLayout.", result};
     }
 }
 
+// 实现类析构函数：销毁描述符集布局实现对象
+// 释放Vulkan描述符集布局对象
 DescriptorSetLayout::Implementation::~Implementation()
 {
     if (_descriptorSetLayout)

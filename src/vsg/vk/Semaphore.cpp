@@ -15,6 +15,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建信号量对象
+// device: 设备对象
+// pipelineStageFlags: 管道阶段标志位（用于同步）
+// pNextCreateInfo: 扩展创建信息（可选）
+// 信号量用于同步队列操作，例如等待图像可用或命令缓冲区完成
 Semaphore::Semaphore(Device* device, VkPipelineStageFlags pipelineStageFlags, void* pNextCreateInfo) :
     _pipelineStageFlags(pipelineStageFlags),
     _device(device)
@@ -30,6 +35,8 @@ Semaphore::Semaphore(Device* device, VkPipelineStageFlags pipelineStageFlags, vo
     }
 }
 
+// 析构函数：销毁信号量对象
+// 销毁Vulkan信号量
 Semaphore::~Semaphore()
 {
     if (_semaphore)

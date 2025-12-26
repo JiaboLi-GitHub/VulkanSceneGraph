@@ -24,6 +24,10 @@ using namespace vsg;
 //
 // GraphicsPipelineState
 //
+// 比较两个图形管线状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较掩码
 int GraphicsPipelineState::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -33,6 +37,9 @@ int GraphicsPipelineState::compare(const Object& rhs_object) const
     return compare_value(mask, rhs.mask);
 }
 
+// 从输入流读取图形管线状态对象
+// input: 输入流对象
+// 读取掩码（版本1.0.9及以上）
 void GraphicsPipelineState::read(Input& input)
 {
     Object::read(input);
@@ -43,6 +50,9 @@ void GraphicsPipelineState::read(Input& input)
     }
 }
 
+// 将图形管线状态对象写入输出流
+// output: 输出流对象
+// 写入掩码（版本1.0.9及以上）
 void GraphicsPipelineState::write(Output& output) const
 {
     Object::write(output);
@@ -107,10 +117,17 @@ void vsg::mergeGraphicsPipelineStates(Mask mask, GraphicsPipelineStates& dest_Pi
 //
 // GraphicsPipeline
 //
+// 构造函数：创建图形管线对象（默认）
+// 图形管线用于定义图形渲染的完整管线状态（着色器、渲染状态等）
 GraphicsPipeline::GraphicsPipeline()
 {
 }
 
+// 构造函数：使用管线布局、着色器阶段、管线状态和子通道创建图形管线对象
+// in_pipelineLayout: 管线布局对象（定义描述符集布局和推送常量范围）
+// in_shaderStages: 着色器阶段列表（顶点、片段、几何等）
+// in_pipelineStates: 管线状态列表（光栅化、深度模板、颜色混合等）
+// in_subpass: 子通道索引（在渲染通道中的子通道）
 GraphicsPipeline::GraphicsPipeline(PipelineLayout* in_pipelineLayout, const ShaderStages& in_shaderStages, const GraphicsPipelineStates& in_pipelineStates, uint32_t in_subpass) :
     stages(in_shaderStages),
     pipelineStates(in_pipelineStates),
@@ -119,10 +136,15 @@ GraphicsPipeline::GraphicsPipeline(PipelineLayout* in_pipelineLayout, const Shad
 {
 }
 
+// 析构函数：销毁图形管线对象
 GraphicsPipeline::~GraphicsPipeline()
 {
 }
 
+// 比较两个图形管线对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、着色器阶段容器、管线状态容器、布局和子通道
 int GraphicsPipeline::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -136,6 +158,9 @@ int GraphicsPipeline::compare(const Object& rhs_object) const
     return compare_value(subpass, rhs.subpass);
 }
 
+// 从输入流读取图形管线对象
+// input: 输入流对象
+// 读取管线布局、着色器阶段、管线状态和子通道
 void GraphicsPipeline::read(Input& input)
 {
     Object::read(input);
@@ -146,6 +171,9 @@ void GraphicsPipeline::read(Input& input)
     input.read("subpass", subpass);
 }
 
+// 将图形管线对象写入输出流
+// output: 输出流对象
+// 写入管线布局、着色器阶段、管线状态和子通道
 void GraphicsPipeline::write(Output& output) const
 {
     Object::write(output);
@@ -156,9 +184,14 @@ void GraphicsPipeline::write(Output& output) const
     output.write("subpass", subpass);
 }
 
+// 编译图形管线
+// context: 编译上下文对象
+// 合并默认、本地和覆盖的管线状态，编译着色器（如果需要），然后创建Vulkan图形管线对象
+// 支持视图特定的实现（每个视图可以有独立的管线状态）
 void GraphicsPipeline::compile(Context& context)
 {
     uint32_t viewID = context.viewID;
+    // 确保实现数组足够大
     if (static_cast<uint32_t>(_implementation.size()) < (viewID + 1))
     {
         _implementation.resize(viewID + 1);
@@ -166,12 +199,14 @@ void GraphicsPipeline::compile(Context& context)
 
     if (!_implementation[viewID])
     {
+        // 合并管线状态：默认状态、本地状态、覆盖状态
         GraphicsPipelineStates combined_pipelineStates;
         combined_pipelineStates.reserve(context.defaultPipelineStates.size() + pipelineStates.size() + context.overridePipelineStates.size());
         mergeGraphicsPipelineStates(context.mask, combined_pipelineStates, context.defaultPipelineStates);
         mergeGraphicsPipelineStates(context.mask, combined_pipelineStates, pipelineStates);
         mergeGraphicsPipelineStates(context.mask, combined_pipelineStates, context.overridePipelineStates);
 
+        // 检查是否已有相同状态的实现可以重用
         for (const auto& imp : _implementation)
         {
             if (imp && vsg::compare_pointer_container(imp->_pipelineStates, combined_pipelineStates) == 0)
@@ -181,7 +216,7 @@ void GraphicsPipeline::compile(Context& context)
             }
         }
 
-        // compile shaders if required
+        // 如果需要，编译着色器（从源代码编译为SPIR-V）
         bool requiresShaderCompiler = false;
         for (const auto& shaderStage : stages)
         {
@@ -199,7 +234,7 @@ void GraphicsPipeline::compile(Context& context)
             auto shaderCompiler = context.getOrCreateShaderCompiler();
             if (shaderCompiler)
             {
-                shaderCompiler->compile(stages); // may need to map defines and paths in some fashion
+                shaderCompiler->compile(stages); // 可能需要以某种方式映射定义和路径
             }
             else
             {
@@ -207,14 +242,16 @@ void GraphicsPipeline::compile(Context& context)
             }
         }
 
-        // compile Vulkan objects
+        // 编译Vulkan对象
         layout->compile(context);
 
+        // 编译所有着色器阶段
         for (auto& shaderStage : stages)
         {
             shaderStage->compile(context);
         }
 
+        // 创建图形管线实现
         _implementation[viewID] = GraphicsPipeline::Implementation::create(context, context.device, context.renderPass, layout, stages, combined_pipelineStates, subpass);
     }
 }

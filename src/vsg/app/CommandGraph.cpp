@@ -21,77 +21,106 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// CommandGraph类的默认构造函数
+// 创建命令图对象
 CommandGraph::CommandGraph()
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
 }
 
+// CommandGraph类的构造函数（设备和队列族）
+// 使用指定的设备和队列族创建命令图
+// in_device: Vulkan设备对象
+// family: 队列族索引
 CommandGraph::CommandGraph(ref_ptr<Device> in_device, int family) :
-    device(in_device),
-    queueFamily(family),
-    presentFamily(-1)
+    device(in_device),  // Vulkan设备
+    queueFamily(family),  // 队列族索引
+    presentFamily(-1)  // 呈现队列族（未设置）
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
 }
 
+// CommandGraph类的构造函数（窗口和子节点）
+// 使用指定的窗口和子节点创建命令图
+// in_window: 窗口对象
+// child: 子节点（可选）
 CommandGraph::CommandGraph(ref_ptr<Window> in_window, ref_ptr<Node> child) :
-    window(in_window),
-    device(in_window->getOrCreateDevice())
+    window(in_window),  // 窗口对象
+    device(in_window->getOrCreateDevice())  // 获取或创建设备
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
 
+    // 获取队列标志
     VkQueueFlags queueFlags = VK_QUEUE_GRAPHICS_BIT;
     if (window->traits()) queueFlags = window->traits()->queueFlags;
 
+    // 获取队列族和呈现队列族
     std::tie(queueFamily, presentFamily) = device->getPhysicalDevice()->getQueueFamily(queueFlags, window->getOrCreateSurface());
 
-    if (child) addChild(child);
+    if (child) addChild(child);  // 添加子节点
 }
 
+// CommandGraph类的析构函数
 CommandGraph::~CommandGraph()
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
 }
 
+// 获取命令缓冲区级别
+// 返回主命令缓冲区级别
+// 返回值：VK_COMMAND_BUFFER_LEVEL_PRIMARY
 VkCommandBufferLevel CommandGraph::level() const
 {
     return VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 }
 
+// 重置命令图
+// 重置命令图状态（当前为空实现）
 void CommandGraph::reset()
 {
 }
 
+// 获取或创建记录遍历对象
+// 如果记录遍历对象不存在则创建，否则预留状态空间
+// 返回值：记录遍历对象
 ref_ptr<RecordTraversal> CommandGraph::getOrCreateRecordTraversal()
 {
     //CPU_INSTRUMENTATION_L1(instrumentation);
     if (!recordTraversal)
-        recordTraversal = RecordTraversal::create(maxSlots);
+        recordTraversal = RecordTraversal::create(maxSlots);  // 创建新的记录遍历对象
     else
-        recordTraversal->getState()->reserve(maxSlots);
+        recordTraversal->getState()->reserve(maxSlots);  // 预留状态空间
 
     return recordTraversal;
 }
 
+// 记录命令缓冲区
+// 遍历场景图并记录命令到命令缓冲区
+// recordedCommandBuffers: 已记录的命令缓冲区集合
+// frameStamp: 帧戳对象
+// databasePager: 数据库分页器（可选）
 void CommandGraph::record(ref_ptr<RecordedCommandBuffers> recordedCommandBuffers, ref_ptr<FrameStamp> frameStamp, ref_ptr<DatabasePager> databasePager)
 {
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "CommandGraph record", COLOR_RECORD_L1);
 
+    // 如果窗口不可见，跳过记录
     if (window && !window->visible())
     {
         //vsg::info("CommandGraph::record() ", frameStamp->frameCount, " window not visible.");
         return;
     }
 
-    // create the RecordTraversal if it isn't already created
+    // 创建记录遍历对象（如果尚未创建）
     getOrCreateRecordTraversal();
 
+    // 设置记录遍历对象的参数
     recordTraversal->recordedCommandBuffers = recordedCommandBuffers;
     recordTraversal->setFrameStamp(frameStamp);
     recordTraversal->setDatabasePager(databasePager);
-    recordTraversal->clearBins();
-    recordTraversal->regionsOfInterest.clear();
+    recordTraversal->clearBins();  // 清空分箱
+    recordTraversal->regionsOfInterest.clear();  // 清空感兴趣区域
 
+    // 查找可用的命令缓冲区（没有依赖提交的）
     ref_ptr<CommandBuffer> commandBuffer;
     for (auto& cb : _commandBuffers)
     {
@@ -101,6 +130,7 @@ void CommandGraph::record(ref_ptr<RecordedCommandBuffers> recordedCommandBuffers
             break;
         }
     }
+    // 如果没有可用的，创建新的命令缓冲区
     if (!commandBuffer)
     {
         ref_ptr<CommandPool> cp = CommandPool::create(device, queueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -109,39 +139,54 @@ void CommandGraph::record(ref_ptr<RecordedCommandBuffers> recordedCommandBuffers
     }
     else
     {
-        commandBuffer->reset();
+        commandBuffer->reset();  // 重置命令缓冲区
     }
 
+    // 增加依赖提交计数
     commandBuffer->numDependentSubmissions().fetch_add(1);
 
+    // 连接命令缓冲区到记录遍历状态
     recordTraversal->getState()->connect(commandBuffer);
 
-    // or select index when maps to a dormant CommandBuffer
+    // 获取Vulkan命令缓冲区句柄
     VkCommandBuffer vk_commandBuffer = *commandBuffer;
 
-    // need to set up the command buffer
-    // if we are nested within a CommandBuffer already then use VkCommandBufferInheritanceInfo
+    // 设置命令缓冲区开始信息
+    // 如果嵌套在命令缓冲区内，则使用VkCommandBufferInheritanceInfo
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;  // 一次性提交
     beginInfo.pInheritanceInfo = nullptr;
 
+    // 开始记录命令缓冲区
     vkBeginCommandBuffer(vk_commandBuffer, &beginInfo);
 
     {
         COMMAND_BUFFER_INSTRUMENTATION(instrumentation, *commandBuffer, "CommandGraph record", COLOR_RECORD)
+        // 遍历场景图并记录命令
         traverse(*recordTraversal);
     }
 
+    // 结束记录命令缓冲区
     vkEndCommandBuffer(vk_commandBuffer);
 
+    // 将命令缓冲区添加到已记录的命令缓冲区集合
     recordedCommandBuffers->add(submitOrder, commandBuffer);
 }
 
+// 为视图创建命令图
+// 创建用于渲染指定视图的命令图
+// window: 窗口对象
+// camera: 相机对象
+// scenegraph: 场景图节点
+// contents: 子通道内容
+// assignHeadlight: 是否分配头灯
+// 返回值：命令图对象
 ref_ptr<CommandGraph> vsg::createCommandGraphForView(ref_ptr<Window> window, ref_ptr<Camera> camera, ref_ptr<Node> scenegraph, VkSubpassContents contents, bool assignHeadlight)
 {
     auto commandGraph = CommandGraph::create(window);
 
+    // 添加渲染图作为子节点
     commandGraph->addChild(createRenderGraphForView(window, camera, scenegraph, contents, assignHeadlight));
 
     return commandGraph;

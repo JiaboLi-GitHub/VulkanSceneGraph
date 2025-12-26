@@ -22,20 +22,29 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建选项对象（默认）
+// 选项对象用于配置文件I/O操作的行为（读取器/写入器、路径、坐标约定等）
+// 初始化默认的格式坐标约定和动态对象查找/传播工具
 Options::Options()
 {
     getOrCreateAuxiliary();
 
+    // 设置默认的格式坐标约定
     formatCoordinateConventions[".gltf"] = CoordinateConvention::Y_UP;
     formatCoordinateConventions[".glb"] = CoordinateConvention::Y_UP;
     formatCoordinateConventions[".dae"] = CoordinateConvention::Y_UP;
     formatCoordinateConventions[".stl"] = CoordinateConvention::NO_PREFERENCE;
     formatCoordinateConventions[".obj"] = CoordinateConvention::NO_PREFERENCE;
 
+    // 创建动态对象查找和传播工具
     findDynamicObjects = FindDynamicObjects::create();
     propagateDynamicObjects = PropagateDynamicObjects::create();
 }
 
+// 拷贝构造函数：从另一个选项对象创建新的选项对象
+// options: 要拷贝的选项对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝所有选项设置，包括共享对象、读取器/写入器、路径、着色器集等
 Options::Options(const Options& options, const CopyOp& copyop) :
     Inherit(options, copyop),
     sharedObjects(options.sharedObjects),
@@ -57,7 +66,7 @@ Options::Options(const Options& options, const CopyOp& copyop) :
     instanceNodeHint(options.instanceNodeHint)
 {
     getOrCreateAuxiliary();
-    // copy any meta data.
+    // 拷贝任何元数据
     if (options.getAuxiliary()) getAuxiliary()->userObjects = options.getAuxiliary()->userObjects;
 }
 
@@ -155,30 +164,47 @@ void Options::write(Output& output) const
     }
 }
 
+// 添加读取器/写入器
+// rw: 读取器/写入器对象
+// 将读取器/写入器添加到列表中（用于文件I/O操作）
 void Options::add(ref_ptr<ReaderWriter> rw)
 {
     if (rw) readerWriters.push_back(rw);
 }
 
+// 添加多个读取器/写入器
+// rws: 读取器/写入器列表
+// 将多个读取器/写入器添加到列表中
 void Options::add(const ReaderWriters& rws)
 {
     for (const auto& rw : rws) add(rw);
 }
 
+// 从命令行参数读取选项
+// arguments: 命令行参数对象
+// 返回: 如果读取了任何选项则返回true
+// 从命令行参数中读取选项设置（包括读取器/写入器的选项和通用选项）
 bool Options::readOptions(CommandLine& arguments)
 {
     bool optionsRead = false;
+    // 让每个读取器/写入器读取其特定选项
     for (auto& readerWriter : readerWriters)
     {
         if (readerWriter->readOptions(*this, arguments)) optionsRead = true;
     }
 
+    // 读取通用选项
     if (arguments.read("--file-cache", fileCache)) optionsRead = true;
     if (arguments.read("--extension-hint", extensionHint)) optionsRead = true;
 
     return optionsRead;
 }
 
+// 如果需要，将文件路径前置到选项的路径列表中
+// filename: 文件名路径
+// options: 选项对象
+// 返回: 如果文件名包含路径，则返回包含该路径的新选项对象，否则返回原选项对象
+// 用于在读取文件时，将文件所在目录添加到搜索路径中
 ref_ptr<const vsg::Options> vsg::prependPathToOptionsIfRequired(const vsg::Path& filename, ref_ptr<const vsg::Options> options)
 {
     auto path = filePath(filename);

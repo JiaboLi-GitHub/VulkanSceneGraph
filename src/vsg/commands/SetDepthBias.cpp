@@ -15,10 +15,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建设置深度偏移命令（默认）
+// 设置深度偏移命令用于调整深度值，常用于阴影贴图和避免Z-fighting
 SetDepthBias::SetDepthBias()
 {
 }
 
+// 构造函数：使用深度偏移参数创建设置深度偏移命令
+// in_depthBiasConstantFactor: 深度偏移常数因子
+// in_depthBiasClamp: 深度偏移最大值（0表示不限制）
+// in_depthBiasSlopeFactor: 深度偏移斜率因子
 SetDepthBias::SetDepthBias(float in_depthBiasConstantFactor, float in_depthBiasClamp, float in_depthBiasSlopeFactor) :
     depthBiasConstantFactor(in_depthBiasConstantFactor),
     depthBiasClamp(in_depthBiasClamp),
@@ -26,6 +32,9 @@ SetDepthBias::SetDepthBias(float in_depthBiasConstantFactor, float in_depthBiasC
 {
 }
 
+// 记录设置深度偏移命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdSetDepthBias命令，设置深度偏移状态
 void SetDepthBias::record(CommandBuffer& commandBuffer) const
 {
     vkCmdSetDepthBias(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);

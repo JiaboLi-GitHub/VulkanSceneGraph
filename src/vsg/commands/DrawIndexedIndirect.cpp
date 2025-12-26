@@ -14,10 +14,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建间接索引绘制命令（默认）
+// 间接索引绘制命令用于从缓冲区读取索引绘制参数，支持GPU驱动的渲染
 DrawIndexedIndirect::DrawIndexedIndirect()
 {
 }
 
+// 构造函数：使用数据对象创建间接索引绘制命令
+// data: 包含间接索引绘制参数的数据对象
+// in_drawCount: 绘制调用次数
+// in_stride: 每个绘制参数之间的字节步长
 DrawIndexedIndirect::DrawIndexedIndirect(ref_ptr<Data> data, uint32_t in_drawCount, uint32_t in_stride) :
     bufferInfo(BufferInfo::create(data)),
     drawCount(in_drawCount),
@@ -25,6 +31,11 @@ DrawIndexedIndirect::DrawIndexedIndirect(ref_ptr<Data> data, uint32_t in_drawCou
 {
 }
 
+// 构造函数：使用缓冲区和偏移创建间接索引绘制命令
+// in_buffer: 包含间接索引绘制参数的缓冲区
+// in_offset: 缓冲区中的偏移量
+// in_drawCount: 绘制调用次数
+// in_stride: 每个绘制参数之间的字节步长
 DrawIndexedIndirect::DrawIndexedIndirect(ref_ptr<Buffer> in_buffer, VkDeviceSize in_offset, uint32_t in_drawCount, uint32_t in_stride) :
     bufferInfo(BufferInfo::create(in_buffer, in_offset, in_drawCount * in_stride)),
     drawCount(in_drawCount),
@@ -32,6 +43,9 @@ DrawIndexedIndirect::DrawIndexedIndirect(ref_ptr<Buffer> in_buffer, VkDeviceSize
 {
 }
 
+// 从输入流读取间接索引绘制命令对象
+// input: 输入流对象
+// 读取数据对象或缓冲区信息，以及绘制次数和步长
 void DrawIndexedIndirect::read(Input& input)
 {
     Command::read(input);
@@ -60,6 +74,9 @@ void DrawIndexedIndirect::read(Input& input)
     input.read("stride", stride);
 }
 
+// 将间接索引绘制命令对象写入输出流
+// output: 输出流对象
+// 写入数据对象或缓冲区信息，以及绘制次数和步长
 void DrawIndexedIndirect::write(Output& output) const
 {
     Command::write(output);
@@ -86,6 +103,9 @@ void DrawIndexedIndirect::write(Output& output) const
     output.write("stride", stride);
 }
 
+// 编译间接索引绘制命令
+// context: 编译上下文对象
+// 如果缓冲区信息包含数据但还没有缓冲区，则创建缓冲区并传输数据
 void DrawIndexedIndirect::compile(Context& context)
 {
     if (!bufferInfo->buffer && bufferInfo->data)
@@ -94,6 +114,9 @@ void DrawIndexedIndirect::compile(Context& context)
     }
 }
 
+// 记录间接索引绘制命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdDrawIndexedIndirect命令，从缓冲区读取索引绘制参数并执行绘制
 void DrawIndexedIndirect::record(CommandBuffer& commandBuffer) const
 {
     vkCmdDrawIndexedIndirect(commandBuffer, bufferInfo->buffer->vk(commandBuffer.deviceID), bufferInfo->offset, drawCount, stride);

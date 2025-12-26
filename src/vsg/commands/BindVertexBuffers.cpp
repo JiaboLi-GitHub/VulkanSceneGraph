@@ -16,16 +16,24 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用首绑定点和数据列表创建绑定顶点缓冲区命令
+// in_firstBinding: 首绑定点索引（从哪个绑定点开始绑定）
+// in_arrays: 顶点数据列表（将被转换为BufferInfo）
 BindVertexBuffers::BindVertexBuffers(uint32_t in_firstBinding, const DataList& in_arrays) :
     firstBinding(in_firstBinding)
 {
     assignArrays(in_arrays);
 }
 
+// 析构函数：销毁绑定顶点缓冲区命令
 BindVertexBuffers::~BindVertexBuffers()
 {
 }
 
+// 比较两个绑定顶点缓冲区命令对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较首绑定点和顶点数组容器
 int BindVertexBuffers::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -36,6 +44,9 @@ int BindVertexBuffers::compare(const Object& rhs_object) const
     return compare_pointer_container(arrays, rhs.arrays);
 }
 
+// 分配顶点数组
+// arrayData: 数据列表
+// 将数据列表转换为BufferInfo列表
 void BindVertexBuffers::assignArrays(const DataList& arrayData)
 {
     arrays.clear();
@@ -46,11 +57,14 @@ void BindVertexBuffers::assignArrays(const DataList& arrayData)
     }
 }
 
+// 从输入流读取绑定顶点缓冲区命令对象
+// input: 输入流对象
+// 清除Vulkan对象，然后读取首绑定点和顶点数组
 void BindVertexBuffers::read(Input& input)
 {
     Command::read(input);
 
-    // clear Vulkan objects
+    // 清除Vulkan对象
     _vulkanData.clear();
 
     input.read("firstBinding", firstBinding);
@@ -64,6 +78,9 @@ void BindVertexBuffers::read(Input& input)
     assignArrays(dataList);
 }
 
+// 将绑定顶点缓冲区命令对象写入输出流
+// output: 输出流对象
+// 写入首绑定点和顶点数组
 void BindVertexBuffers::write(Output& output) const
 {
     Command::write(output);
@@ -80,13 +97,17 @@ void BindVertexBuffers::write(Output& output) const
     }
 }
 
+// 编译绑定顶点缓冲区命令
+// context: 编译上下文对象
+// 检查顶点数组是否需要复制到GPU，如果需要则创建缓冲区并传输数据，然后分配Vulkan数组数据
 void BindVertexBuffers::compile(Context& context)
 {
-    // nothing to compile
+    // 如果没有数组，无需编译
     if (arrays.empty()) return;
 
     auto deviceID = context.deviceID;
 
+    // 检查哪些顶点数组需要复制到GPU
     bool requiresCreateAndCopy = false;
     for (auto& array : arrays)
     {
@@ -97,14 +118,19 @@ void BindVertexBuffers::compile(Context& context)
         }
     }
 
+    // 如果需要，创建缓冲区并传输数据
     if (requiresCreateAndCopy)
     {
         createBufferAndTransferData(context, arrays, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE);
     }
 
+    // 分配Vulkan数组数据
     assignVulkanArrayData(deviceID, arrays, _vulkanData[deviceID]);
 }
 
+// 记录绑定顶点缓冲区命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdBindVertexBuffers命令，绑定顶点缓冲区
 void BindVertexBuffers::record(CommandBuffer& commandBuffer) const
 {
     auto& vkd = _vulkanData[commandBuffer.deviceID];

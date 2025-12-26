@@ -16,11 +16,17 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建视口状态对象（默认）
+// 视口状态用于定义视口和裁剪矩形的参数
+// 槽位8：在绑定管线之后执行
 ViewportState::ViewportState()
 {
     slot = 8;
 }
 
+// 拷贝构造函数：从另一个视口状态对象创建新的视口状态对象
+// vs: 要拷贝的视口状态对象
+// 拷贝视口列表和裁剪矩形列表
 ViewportState::ViewportState(const ViewportState& vs) :
     Inherit(vs),
     viewports(vs.viewports),
@@ -28,22 +34,36 @@ ViewportState::ViewportState(const ViewportState& vs) :
 {
 }
 
+// 构造函数：使用范围创建视口状态对象
+// extent: 范围（宽度和高度）
+// 设置视口和裁剪矩形为从(0,0)到指定范围
 ViewportState::ViewportState(const VkExtent2D& extent) :
     ViewportState()
 {
     set(0, 0, extent.width, extent.height);
 }
 
+// 构造函数：使用位置和尺寸创建视口状态对象
+// x: X坐标
+// y: Y坐标
+// width: 宽度
+// height: 高度
+// 设置视口和裁剪矩形为指定位置和尺寸
 ViewportState::ViewportState(int32_t x, int32_t y, uint32_t width, uint32_t height) :
     ViewportState()
 {
     set(x, y, width, height);
 }
 
+// 析构函数：销毁视口状态对象
 ViewportState::~ViewportState()
 {
 }
 
+// 比较两个视口状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、视口容器和裁剪矩形容器
 int ViewportState::compare(const Object& rhs_object) const
 {
     int result = GraphicsPipelineState::compare(rhs_object);
@@ -55,6 +75,12 @@ int ViewportState::compare(const Object& rhs_object) const
     return compare_value_container(scissors, rhs.scissors);
 }
 
+// 设置视口和裁剪矩形
+// x: X坐标
+// y: Y坐标
+// width: 宽度
+// height: 高度
+// 设置单个视口和裁剪矩形为指定位置和尺寸，深度范围默认为[0.0, 1.0]
 void ViewportState::set(int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
     viewports.resize(1);
@@ -139,12 +165,18 @@ void ViewportState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipeli
     pipelineInfo.pViewportState = viewportState;
 }
 
+// 记录视口状态命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdSetScissor和vkCmdSetViewport命令，设置裁剪矩形和视口
 void ViewportState::record(CommandBuffer& commandBuffer) const
 {
     vkCmdSetScissor(commandBuffer, 0, static_cast<uint32_t>(scissors.size()), scissors.data());
     vkCmdSetViewport(commandBuffer, 0, static_cast<uint32_t>(viewports.size()), viewports.data());
 }
 
+// 获取视口（如果不存在则创建）
+// 返回: 第一个视口的引用
+// 如果视口列表为空，创建一个默认视口并返回
 VkViewport& ViewportState::getViewport()
 {
     if (viewports.empty())
@@ -161,6 +193,9 @@ VkViewport& ViewportState::getViewport()
     return viewports[0];
 }
 
+// 获取裁剪矩形（如果不存在则创建）
+// 返回: 第一个裁剪矩形的引用
+// 如果裁剪矩形列表为空，创建一个默认裁剪矩形并返回
 VkRect2D& ViewportState::getScissor()
 {
     if (scissors.empty())

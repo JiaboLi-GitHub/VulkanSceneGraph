@@ -15,10 +15,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建感兴趣区域节点
+// 感兴趣区域节点定义了一个3D空间区域（由点集定义），用于标记和识别场景中的特定区域
 RegionOfInterest::RegionOfInterest()
 {
 }
 
+// 拷贝构造函数：从另一个感兴趣区域节点创建新的感兴趣区域节点
+// rhs: 要拷贝的感兴趣区域节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝掩码、名称和点集
 RegionOfInterest::RegionOfInterest(const RegionOfInterest& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     mask(rhs.mask),
@@ -27,10 +33,15 @@ RegionOfInterest::RegionOfInterest(const RegionOfInterest& rhs, const CopyOp& co
 {
 }
 
+// 析构函数：销毁感兴趣区域节点
 RegionOfInterest::~RegionOfInterest()
 {
 }
 
+// 比较两个感兴趣区域节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、掩码、名称和点集
 int RegionOfInterest::compare(const Object& rhs_object) const
 {
     int result = Node::compare(rhs_object);
@@ -42,6 +53,9 @@ int RegionOfInterest::compare(const Object& rhs_object) const
     return compare_value_container(points, rhs.points);
 }
 
+// 从输入流读取感兴趣区域节点对象
+// input: 输入流对象
+// 读取掩码、名称和点集
 void RegionOfInterest::read(Input& input)
 {
     Node::read(input);
@@ -51,6 +65,9 @@ void RegionOfInterest::read(Input& input)
     input.read("points", points);
 }
 
+// 将感兴趣区域节点对象写入输出流
+// output: 输出流对象
+// 写入掩码、名称和点集
 void RegionOfInterest::write(Output& output) const
 {
     Node::write(output);

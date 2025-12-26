@@ -22,17 +22,24 @@ using namespace vsg;
 
 /////////////////////////////////////////////////////////////////////////
 //
-// DatabaseQueue
+// DatabaseQueue - 数据库队列，用于管理分页LOD的读取和合并请求
 //
+// 构造函数：使用活动状态创建数据库队列对象
+// status: 活动状态对象（用于控制线程生命周期）
+// 数据库队列用于在多线程环境中管理分页LOD的读取和合并请求
 DatabaseQueue::DatabaseQueue(ref_ptr<ActivityStatus> status) :
     _status(status)
 {
 }
 
+// 析构函数：销毁数据库队列对象
 DatabaseQueue::~DatabaseQueue()
 {
 }
 
+// 添加分页LOD到队列
+// plod: 分页LOD对象
+// 将分页LOD添加到队列并通知等待的线程
 void DatabaseQueue::add(ref_ptr<PagedLOD> plod)
 {
     // debug("DatabaseQueue::add(", plod,") status = ",plod->requestStatus.load());
@@ -42,6 +49,10 @@ void DatabaseQueue::add(ref_ptr<PagedLOD> plod)
     _cv.notify_one();
 }
 
+// 添加分页LOD和编译结果到队列
+// plod: 分页LOD对象
+// cr: 编译结果对象
+// 将分页LOD和编译结果添加到队列并通知等待的线程
 void DatabaseQueue::add(ref_ptr<PagedLOD> plod, const CompileResult& cr)
 {
     std::scoped_lock lock(_mutex);
@@ -50,6 +61,9 @@ void DatabaseQueue::add(ref_ptr<PagedLOD> plod, const CompileResult& cr)
     _compileResult.add(cr);
 }
 
+// 从队列中取出可用的分页LOD（按优先级）
+// 返回: 优先级最高的分页LOD对象，如果队列为空或已取消则返回空指针
+// 等待直到队列中有元素可用，然后返回优先级最高的分页LOD
 ref_ptr<PagedLOD> DatabaseQueue::take_when_available()
 {
     // debug("DatabaseQueue::take_when_available() A size = ", _queue.size());
@@ -57,14 +71,14 @@ ref_ptr<PagedLOD> DatabaseQueue::take_when_available()
     std::chrono::duration waitDuration = std::chrono::milliseconds(100);
     std::unique_lock lock(_mutex);
 
-    // wait until the conditional variable signals that an operation has been added
+    // 等待直到条件变量发出信号表示已添加操作
     while (_queue.empty() && _status->active())
     {
         // debug("   Waiting on condition variable B size = ", _queue.size());
         _cv.wait_for(lock, waitDuration);
     }
 
-    // if the threads we are associated with should no longer be running go for a quick exit and return nothing.
+    // 如果关联的线程不应再运行，快速退出并返回空指针
     if (_queue.empty() || _status->cancel())
     {
         // debug("DatabaseQueue::take_when_available() C empty");
@@ -73,7 +87,7 @@ ref_ptr<PagedLOD> DatabaseQueue::take_when_available()
 
     // debug("DatabaseQueue::take_when_available() D ", _queue.size());
 
-    // find the PagedLOD with the highest priority;
+    // 查找优先级最高的PagedLOD
     auto itr = _queue.begin();
     auto highest_itr = itr++;
 
@@ -89,6 +103,10 @@ ref_ptr<PagedLOD> DatabaseQueue::take_when_available()
     return plod;
 }
 
+// 取出队列中的所有节点
+// cr: 输出参数，用于存储编译结果
+// 返回: 所有节点列表
+// 清空队列并返回所有节点，同时合并编译结果
 DatabaseQueue::Nodes DatabaseQueue::take_all(CompileResult& cr)
 {
     std::scoped_lock lock(_mutex);
@@ -101,8 +119,11 @@ DatabaseQueue::Nodes DatabaseQueue::take_all(CompileResult& cr)
 
 /////////////////////////////////////////////////////////////////////////
 //
-// DatabasePager
+// DatabasePager - 数据库分页器，管理分页LOD的异步加载和卸载
 //
+// 构造函数：创建数据库分页器对象
+// 初始化活动状态、剔除的分页LOD列表、请求队列、合并队列、删除队列和分页LOD容器
+// 数据库分页器用于管理大型场景的分页加载，支持多线程异步读取和合并
 DatabasePager::DatabasePager()
 {
     if (!_status) _status = ActivityStatus::create();
@@ -116,6 +137,8 @@ DatabasePager::DatabasePager()
     pagedLODContainer = PagedLODContainer::create(4000);
 }
 
+// 析构函数：销毁数据库分页器对象
+// 停止所有线程并等待它们完成
 DatabasePager::~DatabasePager()
 {
     debug("DatabasePager::~DatabasePager()");
@@ -128,11 +151,17 @@ DatabasePager::~DatabasePager()
     }
 }
 
+// 分配性能分析工具
+// in_instrumentation: 性能分析工具对象
+// 为数据库分页器分配性能分析工具（用于性能监控）
 void DatabasePager::assignInstrumentation(ref_ptr<Instrumentation> in_instrumentation)
 {
     instrumentation = in_instrumentation;
 }
 
+// 启动数据库分页器
+// numReadThreads: 读取线程数量
+// 启动指定数量的读取线程和删除线程，用于异步加载和卸载分页LOD
 void DatabasePager::start(uint32_t numReadThreads)
 {
     vsg::debug("DatabasePager::start(", numReadThreads, ")");
@@ -220,6 +249,9 @@ void DatabasePager::start(uint32_t numReadThreads)
     threads.emplace_back(deleteThread, std::ref(_deleteQueue), std::ref(_status), std::ref(*this), "DatabasePager delete thread ");
 }
 
+// 请求加载分页LOD
+// plod: 分页LOD对象
+// 将分页LOD添加到读取请求队列（如果还没有待处理的数据）
 void DatabasePager::request(ref_ptr<PagedLOD> plod)
 {
     ++numActiveRequests;
@@ -232,6 +264,7 @@ void DatabasePager::request(ref_ptr<PagedLOD> plod)
 
     if (!hasPending)
     {
+        // 如果状态为NoRequest，将其更改为ReadRequest并添加到请求队列
         if (compare_exchange(plod->requestStatus, PagedLOD::NoRequest, PagedLOD::ReadRequest))
         {
             // debug("DatabasePager::request(", plod.get(), ") adding to requestQueue ", plod->filename, ", ", plod->priority, " plod=", plod.get());
@@ -248,6 +281,9 @@ void DatabasePager::request(ref_ptr<PagedLOD> plod)
     }
 }
 
+// 丢弃请求
+// plod: 分页LOD对象指针
+// 重置分页LOD的请求状态和待处理数据，减少活动请求计数
 void DatabasePager::requestDiscarded(PagedLOD* plod)
 {
     //std::scoped_lock<std::mutex> lock(pendingPagedLODMutex);
@@ -258,6 +294,10 @@ void DatabasePager::requestDiscarded(PagedLOD* plod)
     --numActiveRequests;
 }
 
+// 更新场景图
+// frameStamp: 帧戳对象
+// cr: 输出参数，用于存储编译结果
+// 合并已加载的分页LOD到场景图，管理分页LOD的激活/停用，并处理内存清理
 void DatabasePager::updateSceneGraph(ref_ptr<FrameStamp> frameStamp, CompileResult& cr)
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
@@ -265,6 +305,7 @@ void DatabasePager::updateSceneGraph(ref_ptr<FrameStamp> frameStamp, CompileResu
     frameCount.exchange(frameStamp ? frameStamp->frameCount : 0);
     _deleteQueue->advance(frameStamp);
 
+    // 从合并队列中取出所有节点
     auto nodes = _toMergeQueue->take_all(cr);
 
     std::list<ref_ptr<Object>> deleteList;

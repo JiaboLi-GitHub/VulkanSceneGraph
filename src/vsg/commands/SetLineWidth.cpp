@@ -15,11 +15,17 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用线宽创建设置线宽命令
+// in_lineWidth: 线宽值（以像素为单位）
+// 设置线宽命令用于设置线框模式下的线宽
 SetLineWidth::SetLineWidth(float in_lineWidth) :
     lineWidth(in_lineWidth)
 {
 }
 
+// 记录设置线宽命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdSetLineWidth命令，设置线宽状态
 void SetLineWidth::record(CommandBuffer& commandBuffer) const
 {
     vkCmdSetLineWidth(commandBuffer, lineWidth);

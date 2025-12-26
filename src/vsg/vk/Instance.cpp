@@ -22,6 +22,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 枚举实例扩展属性
+// pLayerName: 层名称（可选，nullptr表示不指定层）
+// 返回: 扩展属性列表
+// 枚举Vulkan实例可用的扩展，用于检查系统支持的扩展
 ExtensionProperties vsg::enumerateInstanceExtensionProperties(const char* pLayerName)
 {
     uint32_t extCount = 0;
@@ -42,6 +46,11 @@ ExtensionProperties vsg::enumerateInstanceExtensionProperties(const char* pLayer
     return extensionProperties;
 }
 
+// 检查扩展是否支持
+// extensionName: 扩展名称
+// pLayerName: 层名称（可选）
+// 返回: 如果扩展支持则返回true
+// 检查指定的Vulkan实例扩展是否可用
 bool vsg::isExtensionSupported(const char* extensionName, const char* pLayerName)
 {
     auto extProps = enumerateInstanceExtensionProperties(pLayerName);
@@ -49,6 +58,9 @@ bool vsg::isExtensionSupported(const char* extensionName, const char* pLayerName
     return std::find_if(extProps.begin(), extProps.end(), compare) != extProps.end();
 }
 
+// 枚举实例层属性
+// 返回: 层属性列表
+// 枚举Vulkan实例可用的验证层和调试层
 InstanceLayerProperties vsg::enumerateInstanceLayerProperties()
 {
     uint32_t layerCount;
@@ -59,6 +71,10 @@ InstanceLayerProperties vsg::enumerateInstanceLayerProperties()
     return availableLayers;
 }
 
+// 验证实例层名称
+// names: 请求的层名称列表
+// 返回: 验证后的层名称列表（只包含可用的层）
+// 验证请求的Vulkan实例层是否可用，过滤掉不可用的层
 Names vsg::validateInstanceLayerNames(const Names& names)
 {
     if (names.empty()) return names;
@@ -91,6 +107,11 @@ Names vsg::validateInstanceLayerNames(const Names& names)
     return validatedNames;
 }
 
+// 调试工具消息回调函数
+// messageSeverity: 消息严重程度
+// pCallbackData: 回调数据（包含消息内容）
+// 返回: VK_FALSE（表示不中断执行）
+// Vulkan调试工具的回调函数，将Vulkan的调试消息转换为VSG日志消息
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsMessengerCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
@@ -112,10 +133,16 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsMessengerCallback(
     return VK_FALSE;
 }
 
+// 构造函数：创建Vulkan实例对象
+// instanceExtensions: 要启用的实例扩展名称列表
+// layers: 要启用的验证层名称列表
+// vulkanApiVersion: Vulkan API版本
+// allocator: 内存分配器（可选）
+// Vulkan实例是Vulkan应用程序的入口点，管理全局状态和物理设备枚举
 Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVersion, AllocationCallbacks* allocator) :
     apiVersion(vulkanApiVersion)
 {
-    // application info
+    // 应用程序信息
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "VulkanSceneGraph application";
@@ -123,6 +150,7 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
     appInfo.engineVersion = VK_MAKE_VERSION(VSG_VERSION_MAJOR, VSG_VERSION_MINOR, VSG_VERSION_PATCH);
     appInfo.apiVersion = vulkanApiVersion;
 
+    // 实例创建信息
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
@@ -130,6 +158,7 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
     createInfo.flags = 0;
 
 #if defined(__APPLE__)
+    // macOS需要端口枚举扩展
     if (vsg::isExtensionSupported(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME))
     {
         instanceExtensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
@@ -145,6 +174,7 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
 
     createInfo.pNext = nullptr;
 
+    // 创建Vulkan实例
     VkInstance instance;
     VkResult result = vkCreateInstance(&createInfo, allocator, &instance);
     if (result == VK_SUCCESS)
@@ -152,12 +182,14 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
         _instance = instance;
         _allocator = allocator;
 
+        // 枚举所有物理设备
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
 
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
+        // 为每个物理设备创建PhysicalDevice对象
         for (auto device : devices)
         {
             _physicalDevices.emplace_back(new PhysicalDevice(this, device));
@@ -168,8 +200,10 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
         throw Exception{"Error: vsg::Instance::create(...) failed to create VkInstance.", result};
     }
 
+    // 初始化扩展函数指针
     _extensions = InstanceExtensions::create(this);
 
+    // 如果支持调试工具扩展，创建调试消息回调
     if (isExtensionSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME) && _extensions->vkCreateDebugUtilsMessengerEXT)
     {
         VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo{};
@@ -181,17 +215,21 @@ Instance::Instance(Names instanceExtensions, Names layers, uint32_t vulkanApiVer
     }
 }
 
+// 析构函数：销毁Vulkan实例对象
+// 清理物理设备列表、调试消息回调，然后销毁Vulkan实例
 Instance::~Instance()
 {
     _physicalDevices.clear();
 
     if (_instance)
     {
+        // 销毁调试消息回调
         if (_debugUtilsMessenger != VK_NULL_HANDLE && _extensions->vkDestroyDebugUtilsMessengerEXT)
         {
             _extensions->vkDestroyDebugUtilsMessengerEXT(_instance, _debugUtilsMessenger, nullptr);
         }
 
+        // 销毁Vulkan实例
         vkDestroyInstance(_instance, _allocator);
     }
 }

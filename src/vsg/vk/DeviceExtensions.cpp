@@ -18,18 +18,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建设备扩展对象
+// device: 设备对象
+// 设备扩展对象管理设备扩展函数指针的获取，支持多种Vulkan扩展
 DeviceExtensions::DeviceExtensions(Device* device)
 {
-    // VK_EXT_host_query_reset
+    // VK_EXT_host_query_reset - 主机查询重置扩展
     device->getProcAddr(vkResetQueryPool, "vkResetQueryPool", "vkResetQueryPoolEXT");
 
-    // VK_KHR_create_renderpass2
+    // VK_KHR_create_renderpass2 - 创建渲染通道2扩展
     if (device->supportsApiVersion(VK_API_VERSION_1_2))
         device->getProcAddr(vkCreateRenderPass2, "vkCreateRenderPass2");
     else if (device->getPhysicalDevice()->supportsDeviceExtension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME))
         device->getProcAddr(vkCreateRenderPass2, "vkCreateRenderPass2KHR");
 
-    // VK_KHR_ray_tracing
+    // VK_KHR_ray_tracing - 光线追踪扩展
     device->getProcAddr(vkCreateAccelerationStructureKHR, "vkCreateAccelerationStructureKHR");
     device->getProcAddr(vkDestroyAccelerationStructureKHR, "vkDestroyAccelerationStructureKHR");
     device->getProcAddr(vkGetAccelerationStructureDeviceAddressKHR, "vkGetAccelerationStructureDeviceAddressKHR");
@@ -39,16 +42,18 @@ DeviceExtensions::DeviceExtensions(Device* device)
     device->getProcAddr(vkGetRayTracingShaderGroupHandlesKHR, "vkGetRayTracingShaderGroupHandlesKHR");
     device->getProcAddr(vkCmdTraceRaysKHR, "vkCmdTraceRaysKHR");
 
+    // 缓冲区设备地址扩展
     device->getProcAddr(vkGetBufferDeviceAddressKHR, "vkGetBufferDeviceAddressKHR");
 
-    // VK_EXT_mesh_shader
+    // VK_EXT_mesh_shader - 网格着色器扩展
     device->getProcAddr(vkCmdDrawMeshTasksEXT, "vkCmdDrawMeshTasksEXT");
     device->getProcAddr(vkCmdDrawMeshTasksIndirectEXT, "vkCmdDrawMeshTasksIndirectEXT");
     device->getProcAddr(vkCmdDrawMeshTasksIndirectCountEXT, "vkCmdDrawMeshTasksIndirectCountEXT");
 
-    // VK_EXT_extended_dynamic_state
+    // VK_EXT_extended_dynamic_state - 扩展动态状态扩展
     if (device->supportsApiVersion(VK_API_VERSION_1_3))
     {
+        // Vulkan 1.3核心功能
         device->getProcAddr(vkCmdSetCullMode, "vkCmdSetCullMode");
         device->getProcAddr(vkCmdSetFrontFace, "vkCmdSetFrontFace");
         device->getProcAddr(vkCmdSetPrimitiveTopology, "vkCmdSetPrimitiveTopology");
@@ -64,6 +69,7 @@ DeviceExtensions::DeviceExtensions(Device* device)
     }
     else if (device->supportsDeviceExtension("VK_EXT_extended_dynamic_state"))
     {
+        // 扩展版本
         device->getProcAddr(vkCmdSetCullMode, "vkCmdSetCullModeEXT");
         device->getProcAddr(vkCmdSetFrontFace, "vkCmdSetFrontFaceEXT");
         device->getProcAddr(vkCmdSetPrimitiveTopology, "vkCmdSetPrimitiveTopologyEXT");

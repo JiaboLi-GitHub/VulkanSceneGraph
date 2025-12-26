@@ -15,16 +15,24 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建清除附件命令（默认）
+// 清除附件命令用于清除渲染附件（颜色、深度、模板）的指定区域
 ClearAttachments::ClearAttachments()
 {
 }
 
+// 构造函数：使用附件列表和矩形列表创建清除附件命令
+// in_attachments: 附件列表（包含清除的方面掩码、颜色附件索引和清除值）
+// in_rects: 矩形列表（指定要清除的区域，包括偏移、范围、基础数组层和层数）
 ClearAttachments::ClearAttachments(const Attachments& in_attachments, const Rects& in_rects) :
     attachments(in_attachments),
     rects(in_rects)
 {
 }
 
+// 从输入流读取清除附件命令对象
+// input: 输入流对象
+// 读取附件列表（方面掩码、颜色附件索引、清除值）和矩形列表（矩形、基础数组层、层数）
 void ClearAttachments::read(Input& input)
 {
     Command::read(input);
@@ -46,6 +54,9 @@ void ClearAttachments::read(Input& input)
     }
 }
 
+// 将清除附件命令对象写入输出流
+// output: 输出流对象
+// 写入附件列表和矩形列表
 void ClearAttachments::write(Output& output) const
 {
     Command::write(output);
@@ -67,6 +78,9 @@ void ClearAttachments::write(Output& output) const
     }
 }
 
+// 记录清除附件命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdClearAttachments命令，清除指定的附件区域
 void ClearAttachments::record(CommandBuffer& commandBuffer) const
 {
     vkCmdClearAttachments(commandBuffer,

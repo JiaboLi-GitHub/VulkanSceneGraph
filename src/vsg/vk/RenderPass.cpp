@@ -262,6 +262,8 @@ RenderPass::RenderPass(Device* in_device, const Attachments& in_attachments, con
     }
 }
 
+// 析构函数：销毁渲染通道对象
+// 销毁Vulkan渲染通道
 RenderPass::~RenderPass()
 {
     if (_renderPass)
@@ -270,6 +272,10 @@ RenderPass::~RenderPass()
     }
 }
 
+// 创建默认颜色附件描述
+// imageFormat: 图像格式
+// 返回: 颜色附件描述
+// 创建用于颜色附件的默认附件描述（清除并存储，最终布局为呈现源）
 AttachmentDescription vsg::defaultColorAttachment(VkFormat imageFormat)
 {
     AttachmentDescription colorAttachment = {};
@@ -285,6 +291,10 @@ AttachmentDescription vsg::defaultColorAttachment(VkFormat imageFormat)
     return colorAttachment;
 }
 
+// 创建默认深度附件描述
+// depthFormat: 深度格式
+// 返回: 深度附件描述
+// 创建用于深度附件的默认附件描述（清除但不存储，最终布局为深度模板附件最优）
 AttachmentDescription vsg::defaultDepthAttachment(VkFormat depthFormat)
 {
     AttachmentDescription depthAttachment = {};
@@ -300,11 +310,19 @@ AttachmentDescription vsg::defaultDepthAttachment(VkFormat depthFormat)
     return depthAttachment;
 }
 
+// 创建渲染通道（带颜色和深度附件）
+// device: 设备对象
+// imageFormat: 图像格式
+// depthFormat: 深度格式
+// requiresDepthRead: 是否需要读取深度（如果为true则存储深度）
+// 返回: 渲染通道对象
+// 创建包含颜色和深度附件的标准渲染通道
 ref_ptr<RenderPass> vsg::createRenderPass(Device* device, VkFormat imageFormat, VkFormat depthFormat, bool requiresDepthRead)
 {
     auto colorAttachment = defaultColorAttachment(imageFormat);
     auto depthAttachment = defaultDepthAttachment(depthFormat);
 
+    // 如果需要读取深度，则存储深度附件
     if (requiresDepthRead)
     {
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -312,14 +330,17 @@ ref_ptr<RenderPass> vsg::createRenderPass(Device* device, VkFormat imageFormat, 
 
     RenderPass::Attachments attachments{colorAttachment, depthAttachment};
 
+    // 颜色附件引用
     AttachmentReference colorAttachmentRef = {};
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    // 深度附件引用
     AttachmentReference depthAttachmentRef = {};
     depthAttachmentRef.attachment = 1;
     depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    // 子通道描述
     SubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachments.emplace_back(colorAttachmentRef);
@@ -327,7 +348,7 @@ ref_ptr<RenderPass> vsg::createRenderPass(Device* device, VkFormat imageFormat, 
 
     RenderPass::Subpasses subpasses{subpass};
 
-    // image layout transition
+    // 图像布局转换 - 颜色附件依赖
     SubpassDependency colorDependency = {};
     colorDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     colorDependency.dstSubpass = 0;
@@ -337,7 +358,7 @@ ref_ptr<RenderPass> vsg::createRenderPass(Device* device, VkFormat imageFormat, 
     colorDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     colorDependency.dependencyFlags = 0;
 
-    // depth buffer is shared between swap chain images
+    // 深度缓冲区在交换链图像之间共享 - 深度附件依赖
     SubpassDependency depthDependency = {};
     depthDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     depthDependency.dstSubpass = 0;

@@ -14,10 +14,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建复制查询池结果命令（默认）
+// 复制查询池结果命令用于将查询结果从查询池复制到缓冲区
 CopyQueryPoolResults::CopyQueryPoolResults()
 {
 }
 
+// 从输入流读取复制查询池结果命令对象
+// input: 输入流对象
+// 读取查询池、首查询索引、查询数量、目标缓冲区、步长和标志
 void CopyQueryPoolResults::read(Input& input)
 {
     Command::read(input);
@@ -30,6 +35,9 @@ void CopyQueryPoolResults::read(Input& input)
     input.readValue<uint32_t>("flags", flags);
 }
 
+// 将复制查询池结果命令对象写入输出流
+// output: 输出流对象
+// 写入查询池、首查询索引、查询数量、目标缓冲区、步长和标志
 void CopyQueryPoolResults::write(Output& output) const
 {
     Command::write(output);
@@ -42,11 +50,17 @@ void CopyQueryPoolResults::write(Output& output) const
     output.writeValue<uint32_t>("flags", flags);
 }
 
+// 编译复制查询池结果命令
+// context: 编译上下文对象
+// 编译查询池对象
 void CopyQueryPoolResults::compile(Context& context)
 {
     if (queryPool) queryPool->compile(context);
 }
 
+// 记录复制查询池结果命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdCopyQueryPoolResults命令，将查询结果复制到缓冲区
 void CopyQueryPoolResults::record(CommandBuffer& commandBuffer) const
 {
     if (!queryPool || !dest) return;

@@ -14,14 +14,22 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建资源提示对象（默认）
+// 资源提示用于向系统提供资源分配的建议（缓冲区大小、描述符池大小、光源数量范围等）
 ResourceHints::ResourceHints()
 {
 }
 
+// 析构函数：销毁资源提示对象
 ResourceHints::~ResourceHints()
 {
 }
 
+// 从输入流读取资源提示对象
+// input: 输入流对象
+// 读取最大槽位（版本1.1.11及以上支持状态和视图槽位）、描述符集数量、描述符池大小、最小缓冲区大小、
+// 最小设备内存大小、最小临时缓冲区大小（版本1.1.8及以上）、光源数量范围、阴影贴图数量范围、阴影贴图大小（版本1.0.10及以上）、
+// 数据库分页器读取线程数、数据传输提示（版本1.1.8及以上）、视口状态提示（版本1.1.11及以上）
 void ResourceHints::read(Input& input)
 {
     Object::read(input);
@@ -76,6 +84,9 @@ void ResourceHints::read(Input& input)
     }
 }
 
+// 将资源提示对象写入输出流
+// output: 输出流对象
+// 写入所有资源提示参数
 void ResourceHints::write(Output& output) const
 {
     Object::write(output);

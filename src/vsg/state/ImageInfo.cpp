@@ -380,6 +380,11 @@ uint32_t vsg::computeNumMipMapLevels(const Data* data, const Sampler* sampler)
     return mipLevels;
 }
 
+// 构造函数：使用采样器、图像视图和图像布局创建图像信息对象
+// in_sampler: 采样器对象（定义纹理采样方式）
+// in_imageView: 图像视图对象（定义图像的视图）
+// in_imageLayout: 图像布局（定义图像在GPU中的布局状态）
+// 图像信息用于将图像和采样器组合在一起，用于描述符集绑定
 ImageInfo::ImageInfo(ref_ptr<Sampler> in_sampler, ref_ptr<ImageView> in_imageView, VkImageLayout in_imageLayout) :
     sampler(in_sampler),
     imageView(in_imageView),
@@ -387,10 +392,15 @@ ImageInfo::ImageInfo(ref_ptr<Sampler> in_sampler, ref_ptr<ImageView> in_imageVie
 {
 }
 
+// 析构函数：销毁图像信息对象
 ImageInfo::~ImageInfo()
 {
 }
 
+// 比较两个图像信息对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、采样器、图像视图和图像布局
 int ImageInfo::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -403,6 +413,9 @@ int ImageInfo::compare(const Object& rhs_object) const
     return compare_value(imageLayout, rhs.imageLayout);
 }
 
+// 计算Mipmap级别数量
+// 根据数据尺寸和采样器的maxLod计算所需的Mipmap级别数量
+// 如果数据未压缩且需要生成Mipmap，则添加传输源使用标志
 void ImageInfo::computeNumMipMapLevels()
 {
     if (imageView && imageView->image && imageView->image->data)

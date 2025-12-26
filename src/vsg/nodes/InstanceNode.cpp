@@ -15,10 +15,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建实例节点
+// 实例节点用于使用实例化渲染技术高效地渲染多个相同几何体的副本
 InstanceNode::InstanceNode()
 {
 }
 
+// 拷贝构造函数：从另一个实例节点创建新的实例节点
+// rhs: 要拷贝的实例节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝实例参数（首实例索引、实例数量）和实例数据（平移、旋转、缩放、颜色）以及子节点
 InstanceNode::InstanceNode(const InstanceNode& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     firstInstance(rhs.firstInstance),
@@ -31,10 +37,15 @@ InstanceNode::InstanceNode(const InstanceNode& rhs, const CopyOp& copyop) :
 {
 }
 
+// 析构函数：销毁实例节点
 InstanceNode::~InstanceNode()
 {
 }
 
+// 比较两个实例节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、首实例索引、实例数量、平移、旋转、缩放、颜色和子节点
 int InstanceNode::compare(const Object& rhs_object) const
 {
     int result = Node::compare(rhs_object);
@@ -50,6 +61,9 @@ int InstanceNode::compare(const Object& rhs_object) const
     return compare_pointer(child, rhs.child);
 }
 
+// 从输入流读取实例节点对象
+// input: 输入流对象
+// 读取实例参数和实例数据（作为Data对象，然后转换为BufferInfo）
 void InstanceNode::read(Input& input)
 {
     Node::read(input);
@@ -57,6 +71,7 @@ void InstanceNode::read(Input& input)
     input.read("firstInstance", firstInstance);
     input.read("instanceCount", instanceCount);
 
+    // 读取平移数据
     vsg::ref_ptr<Data> data;
     input.readObject("translations", data);
     if (data)
@@ -64,18 +79,21 @@ void InstanceNode::read(Input& input)
     else
         translations = {};
 
+    // 读取旋转数据
     input.readObject("rotations", data);
     if (data)
         rotations = vsg::BufferInfo::create(data);
     else
         rotations = {};
 
+    // 读取缩放数据
     input.readObject("scales", data);
     if (data)
         scales = vsg::BufferInfo::create(data);
     else
         scales = {};
 
+    // 读取颜色数据
     input.readObject("colors", data);
     if (data)
         colors = vsg::BufferInfo::create(data);
@@ -85,6 +103,9 @@ void InstanceNode::read(Input& input)
     input.read("child", child);
 }
 
+// 将实例节点对象写入输出流
+// output: 输出流对象
+// 写入实例参数和实例数据（从BufferInfo提取Data对象）
 void InstanceNode::write(Output& output) const
 {
     Node::write(output);
@@ -115,16 +136,21 @@ void InstanceNode::write(Output& output) const
     output.write("child", child);
 }
 
+// 编译实例节点
+// context: 编译上下文对象
+// 检查实例数据是否需要复制到GPU，如果需要则创建缓冲区并传输数据
 void InstanceNode::compile(Context& context)
 {
     auto deviceID = context.deviceID;
     bool requiresCreateAndCopy = false;
 
+    // 检查哪些实例数据需要复制到GPU
     if (translations && translations->requiresCopy(deviceID)) requiresCreateAndCopy = true;
     if (rotations && rotations->requiresCopy(deviceID)) requiresCreateAndCopy = true;
     if (scales && scales->requiresCopy(deviceID)) requiresCreateAndCopy = true;
     if (colors && colors->requiresCopy(deviceID)) requiresCreateAndCopy = true;
 
+    // 如果需要，创建缓冲区并传输数据
     if (requiresCreateAndCopy)
     {
         BufferInfoList combinedBufferInfos;
@@ -133,6 +159,7 @@ void InstanceNode::compile(Context& context)
         if (scales) combinedBufferInfos.push_back(scales);
         if (colors) combinedBufferInfos.push_back(colors);
 
+        // 创建顶点缓冲区并传输数据
         createBufferAndTransferData(context, combinedBufferInfos, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE);
     }
 }

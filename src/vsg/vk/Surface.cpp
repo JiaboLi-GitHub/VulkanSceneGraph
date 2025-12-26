@@ -15,12 +15,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建表面对象
+// surface: Vulkan表面句柄
+// instance: Vulkan实例对象
+// 表面代表窗口系统表面，用于呈现图像到屏幕
 Surface::Surface(VkSurfaceKHR surface, Instance* instance) :
     _surface(surface),
     _instance(instance)
 {
 }
 
+// 析构函数：销毁表面对象
+// 销毁Vulkan表面
 Surface::~Surface()
 {
     if (_surface)

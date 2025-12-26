@@ -16,10 +16,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建光栅化状态对象（默认）
+// 光栅化状态用于定义光栅化阶段的参数（深度钳制、多边形模式、面剔除、深度偏移、线宽等）
 RasterizationState::RasterizationState()
 {
 }
 
+// 拷贝构造函数：从另一个光栅化状态对象创建新的光栅化状态对象
+// rs: 要拷贝的光栅化状态对象
+// 拷贝所有光栅化参数（深度钳制、光栅化丢弃、多边形模式、剔除模式、正面、深度偏移、线宽等）
 RasterizationState::RasterizationState(const RasterizationState& rs) :
     Inherit(rs),
     depthClampEnable(rs.depthClampEnable),
@@ -35,10 +40,15 @@ RasterizationState::RasterizationState(const RasterizationState& rs) :
 {
 }
 
+// 析构函数：销毁光栅化状态对象
 RasterizationState::~RasterizationState()
 {
 }
 
+// 比较两个光栅化状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较光栅化参数区域（从depthClampEnable到lineWidth）
 int RasterizationState::compare(const Object& rhs_object) const
 {
     int result = GraphicsPipelineState::compare(rhs_object);
@@ -48,6 +58,10 @@ int RasterizationState::compare(const Object& rhs_object) const
     return compare_region(depthClampEnable, lineWidth, rhs.depthClampEnable);
 }
 
+// 从输入流读取光栅化状态对象
+// input: 输入流对象
+// 读取所有光栅化参数（深度钳制、光栅化丢弃、多边形模式、剔除模式、正面、深度偏移、线宽等）
+// 注意：depthBiasConstantFactor在版本1.1.11及以上作为浮点数读取，否则作为整数读取
 void RasterizationState::read(Input& input)
 {
     GraphicsPipelineState::read(input);
@@ -69,6 +83,9 @@ void RasterizationState::read(Input& input)
     input.read("lineWidth", lineWidth);
 }
 
+// 将光栅化状态对象写入输出流
+// output: 输出流对象
+// 写入所有光栅化参数
 void RasterizationState::write(Output& output) const
 {
     GraphicsPipelineState::write(output);
@@ -90,6 +107,10 @@ void RasterizationState::write(Output& output) const
     output.write("lineWidth", lineWidth);
 }
 
+// 应用光栅化状态到图形管线创建信息
+// context: 编译上下文对象
+// pipelineInfo: 图形管线创建信息（输出参数）
+// 从临时内存分配光栅化状态创建信息，填充所有光栅化参数，然后设置到管线创建信息中
 void RasterizationState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipelineInfo) const
 {
     auto rasteratizationState = context.scratchMemory->allocate<VkPipelineRasterizationStateCreateInfo>();

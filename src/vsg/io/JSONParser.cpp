@@ -24,61 +24,88 @@ using namespace vsg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// JSONParser::Schema
+// JSONParser::Schema - JSON解析器模式基类，定义了解析JSON元素的接口
 //
+// 读取JSON数组（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_array(JSONParser&)
 {
 }
 
+// 读取JSON对象（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_object(JSONParser&)
 {
 }
 
+// 读取JSON字符串（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_string(JSONParser&)
 {
 }
 
+// 读取JSON数字（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_number(JSONParser&, std::istream&)
 {
 }
 
+// 读取JSON布尔值（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_bool(JSONParser&, bool)
 {
 }
 
+// 读取JSON null值（无名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_null(JSONParser&)
 {
 }
 
+// 读取JSON数组（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_array(JSONParser&, const std::string_view&)
 {
 }
 
+// 读取JSON对象（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_object(JSONParser&, const std::string_view&)
 {
 }
 
+// 读取JSON字符串（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_string(JSONParser&, const std::string_view&)
 {
 }
 
+// 读取JSON数字（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_number(JSONParser&, const std::string_view&, std::istream&)
 {
 }
 
+// 读取JSON布尔值（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_bool(JSONParser&, const std::string_view&, bool)
 {
 }
 
+// 读取JSON null值（带名称）
+// 基类实现为空，子类应重写此方法
 void JSONParser::Schema::read_null(JSONParser&, const std::string_view&)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// JSONtoMetaDataSchema
+// JSONtoMetaDataSchema - JSON到元数据模式的转换器，将JSON数据转换为VSG对象
 //
 
+// 添加对象到数组
+// in_object: 要添加的对象
+// 将对象添加到Objects容器中（用于JSON数组）
 void JSONtoMetaDataSchema::addToArray(ref_ptr<Object> in_object)
 {
     if (!in_object) return;
@@ -87,6 +114,10 @@ void JSONtoMetaDataSchema::addToArray(ref_ptr<Object> in_object)
     objects->addChild(in_object);
 }
 
+// 添加对象到对象（作为属性）
+// name: 属性名称
+// in_object: 要添加的对象
+// 将对象作为属性添加到Object中（用于JSON对象）
 void JSONtoMetaDataSchema::addToObject(const std::string_view& name, ref_ptr<Object> in_object)
 {
     if (!in_object) return;

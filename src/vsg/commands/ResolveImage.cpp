@@ -15,10 +15,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建图像解析命令（默认）
+// 图像解析命令用于将多重采样图像解析为单采样图像
 ResolveImage::ResolveImage()
 {
 }
 
+// 记录图像解析命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdResolveImage命令，将多重采样源图像解析为单采样目标图像
 void ResolveImage::record(CommandBuffer& commandBuffer) const
 {
     vkCmdResolveImage(commandBuffer,

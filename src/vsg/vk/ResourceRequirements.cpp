@@ -33,24 +33,35 @@ using namespace vsg;
 
 /////////////////////////////////////////////////////////////////////
 //
-// ResourceRequirements
+// ResourceRequirements - 资源需求，用于计算编译场景图所需的资源
 //
+// 构造函数：创建资源需求对象
+// 初始化视图详情栈
 ResourceRequirements::ResourceRequirements()
 {
     viewDetailsStack.push(ResourceRequirements::ViewDetails{});
 }
 
+// 构造函数：使用资源提示创建资源需求对象
+// hints: 资源提示对象
+// 从资源提示中提取资源需求
 ResourceRequirements::ResourceRequirements(ref_ptr<ResourceHints> hints) :
     vsg::ResourceRequirements()
 {
     if (hints) apply(*hints);
 }
 
+// 计算描述符集数量
+// 返回: 描述符集总数
+// 计算外部描述符集数量和内部描述符集数量的总和
 uint32_t ResourceRequirements::computeNumDescriptorSets() const
 {
     return externalNumDescriptorSets + static_cast<uint32_t>(descriptorSets.size());
 }
 
+// 计算描述符池大小
+// 返回: 描述符池大小列表
+// 根据描述符类型映射计算描述符池大小
 DescriptorPoolSizes ResourceRequirements::computeDescriptorPoolSizes() const
 {
     DescriptorPoolSizes poolSizes;
@@ -61,6 +72,9 @@ DescriptorPoolSizes ResourceRequirements::computeDescriptorPoolSizes() const
     return poolSizes;
 }
 
+// 应用资源提示
+// resourceHints: 资源提示对象
+// 将资源提示中的需求合并到当前资源需求中
 void ResourceRequirements::apply(const ResourceHints& resourceHints)
 {
     maxSlots.merge(resourceHints.maxSlots);
@@ -89,8 +103,12 @@ void ResourceRequirements::apply(const ResourceHints& resourceHints)
 
 //////////////////////////////////////////////////////////////////////
 //
-// CollectResourceRequirements
+// CollectResourceRequirements - 收集资源需求访问者，遍历场景图收集资源需求
 //
+// 创建资源提示
+// tileMultiplier: 瓦片乘数（用于分页数据库）
+// 返回: 资源提示对象
+// 根据收集的资源需求创建资源提示，考虑瓦片乘数以支持分页数据库
 ref_ptr<ResourceHints> CollectResourceRequirements::createResourceHints(uint32_t tileMultiplier) const
 {
     auto resourceHints = vsg::ResourceHints::create();
@@ -99,6 +117,7 @@ ref_ptr<ResourceHints> CollectResourceRequirements::createResourceHints(uint32_t
     resourceHints->numDescriptorSets = static_cast<uint32_t>(requirements.computeNumDescriptorSets() * tileMultiplier);
     resourceHints->descriptorPoolSizes = requirements.computeDescriptorPoolSizes();
 
+    // 按瓦片乘数缩放描述符数量
     for (auto& poolSize : resourceHints->descriptorPoolSizes)
     {
         poolSize.descriptorCount = poolSize.descriptorCount * tileMultiplier;
@@ -107,11 +126,18 @@ ref_ptr<ResourceHints> CollectResourceRequirements::createResourceHints(uint32_t
     return resourceHints;
 }
 
+// 应用对象（访问者模式）
+// object: 对象
+// 遍历对象及其子对象收集资源需求
 void CollectResourceRequirements::apply(const Object& object)
 {
     object.traverse(*this);
 }
 
+// 检查对象是否有资源提示
+// object: 对象
+// 返回: 如果找到资源提示则返回true
+// 检查对象是否包含资源提示，如果有则应用它
 bool CollectResourceRequirements::checkForResourceHints(const Object& object)
 {
     auto resourceHints = object.getObject<ResourceHints>("ResourceHints");
@@ -126,11 +152,17 @@ bool CollectResourceRequirements::checkForResourceHints(const Object& object)
     }
 }
 
+// 应用资源提示
+// resourceHints: 资源提示对象
+// 将资源提示合并到资源需求中
 void CollectResourceRequirements::apply(const ResourceHints& resourceHints)
 {
     requirements.apply(resourceHints);
 }
 
+// 应用节点（访问者模式）
+// node: 节点对象
+// 处理节点并遍历其子节点，跟踪资源提示的嵌套层级
 void CollectResourceRequirements::apply(const Node& node)
 {
     bool hasResourceHints = checkForResourceHints(node);
@@ -141,6 +173,9 @@ void CollectResourceRequirements::apply(const Node& node)
     if (hasResourceHints) --_numResourceHintsAbove;
 }
 
+// 应用分页LOD节点（访问者模式）
+// plod: 分页LOD节点对象
+// 处理分页LOD节点，标记场景图包含分页LOD
 void CollectResourceRequirements::apply(const PagedLOD& plod)
 {
     bool hasResourceHints = checkForResourceHints(plod);

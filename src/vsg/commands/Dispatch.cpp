@@ -14,6 +14,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 从输入流读取调度命令对象
+// input: 输入流对象
+// 读取工作组数量（X、Y、Z三个维度）
+// 调度命令用于执行计算着色器
 void Dispatch::read(Input& input)
 {
     Command::read(input);
@@ -23,6 +27,9 @@ void Dispatch::read(Input& input)
     input.read("groupCountZ", groupCountZ);
 }
 
+// 将调度命令对象写入输出流
+// output: 输出流对象
+// 写入工作组数量（X、Y、Z三个维度）
 void Dispatch::write(Output& output) const
 {
     Command::write(output);
@@ -32,6 +39,9 @@ void Dispatch::write(Output& output) const
     output.write("groupCountZ", groupCountZ);
 }
 
+// 记录调度命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdDispatch命令，调度计算着色器工作组
 void Dispatch::record(CommandBuffer& commandBuffer) const
 {
     vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);

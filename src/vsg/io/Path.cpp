@@ -20,61 +20,92 @@ using namespace vsg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Path
+// Path - 路径类，提供跨平台的文件路径操作
 //
+// 构造函数：创建路径对象（默认）
+// 路径类用于处理文件系统路径，支持UTF-8和宽字符编码
 Path::Path()
 {
 }
 
+// 拷贝构造函数：从另一个路径对象创建新的路径对象
+// path: 要拷贝的路径对象
 Path::Path(const Path& path) :
     _string(path._string)
 {
 }
 
+// 构造函数：使用C字符串创建路径对象
+// str: C风格字符串（UTF-8编码）
 Path::Path(const char* str)
 {
     assign(str);
 }
 
+// 构造函数：使用标准字符串创建路径对象
+// str: 标准字符串（UTF-8编码）
 Path::Path(const std::string& str)
 {
     assign(str);
 }
 
+// 构造函数：使用宽字符C字符串创建路径对象
+// str: 宽字符C风格字符串
 Path::Path(const wchar_t* str)
 {
     assign(str);
 }
 
+// 构造函数：使用宽字符标准字符串创建路径对象
+// str: 宽字符标准字符串
 Path::Path(const std::wstring& str)
 {
     assign(str);
 }
 
+// 赋值操作符：从另一个路径对象赋值
+// path: 源路径对象
+// 返回: 当前路径对象的引用
 Path& Path::assign(const Path& path)
 {
     if (&path != this) _string = path._string;
     return *this;
 }
 
+// 赋值操作符：从标准字符串赋值
+// str: 标准字符串（UTF-8编码）
+// 返回: 当前路径对象的引用
+// 将UTF-8字符串转换为内部字符串格式
 Path& Path::assign(const std::string& str)
 {
     convert_utf(str, _string);
     return *this;
 }
 
+// 赋值操作符：从C字符串赋值
+// str: C风格字符串（UTF-8编码）
+// 返回: 当前路径对象的引用
+// 将UTF-8字符串转换为内部字符串格式
 Path& Path::assign(const char* str)
 {
     convert_utf(str, _string);
     return *this;
 }
 
+// 赋值操作符：从宽字符标准字符串赋值
+// str: 宽字符标准字符串
+// 返回: 当前路径对象的引用
+// 将宽字符字符串转换为内部字符串格式
 Path& Path::assign(const std::wstring& str)
 {
     convert_utf(str, _string);
     return *this;
 }
 
+// 赋值操作符：从宽字符C字符串赋值
+// str: 宽字符C风格字符串
+// 返回: 当前路径对象的引用
+// 将宽字符字符串转换为内部字符串格式
 Path& Path::assign(const wchar_t* str)
 {
     convert_utf(str, _string);
@@ -107,6 +138,10 @@ Path& Path::replace(size_type pos, size_type n, const wchar_t* str)
     return *this;
 }
 
+// 追加路径
+// right: 要追加的路径
+// 返回: 当前路径对象的引用
+// 智能处理路径分隔符，确保路径正确连接
 Path& Path::append(const Path& right)
 {
     if (empty())
@@ -115,17 +150,19 @@ Path& Path::append(const Path& right)
     }
 
     auto lastChar = _string[_string.size() - 1];
+    // 如果最后一个字符是首选分隔符，直接连接
     if (lastChar == preferred_separator)
     {
         concat(right._string);
     }
+    // 如果最后一个字符是备用分隔符，替换为首选分隔符后连接
     else if (lastChar == alternate_separator)
     {
         _string.erase(_string.size() - 1, 1);
         _string.push_back(preferred_separator);
         _string.append(right._string);
     }
-    else // lastChar != a delimiter
+    else // 最后一个字符不是分隔符，添加分隔符后连接
     {
         _string.push_back(preferred_separator);
         _string.append(right._string);
@@ -134,17 +171,26 @@ Path& Path::append(const Path& right)
     return *this;
 }
 
+// 擦除路径的一部分
+// pos: 起始位置
+// len: 要擦除的长度
+// 返回: 当前路径对象的引用
 Path& Path::erase(size_t pos, size_t len)
 {
     _string.erase(pos, len);
     return *this;
 }
 
+// 获取文件类型
+// 返回: 文件类型（文件、目录、未知等）
 FileType Path::type() const
 {
     return vsg::fileType(*this);
 }
 
+// 词法规范化路径
+// 返回: 规范化后的路径
+// 移除路径中的"."和".."引用，规范化路径分隔符
 Path Path::lexically_normal() const
 {
     if (_string.empty()) return {};
@@ -273,9 +319,13 @@ Path Path::lexically_normal() const
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// Path manipulation functions
+// Path manipulation functions - 路径操作函数
 //
 
+// 获取文件路径（不包含文件名）
+// path: 完整路径
+// 返回: 文件路径部分（不包含文件名）
+// 如果路径以相对路径结尾（"."或".."），返回原路径
 Path vsg::filePath(const Path& path)
 {
     if (trailingRelativePath(path)) return path;
@@ -291,6 +341,10 @@ Path vsg::filePath(const Path& path)
     }
 }
 
+// 获取文件扩展名
+// path: 完整路径
+// 返回: 文件扩展名（包含点号，如".txt"）
+// 如果路径中没有扩展名或扩展名在最后一个分隔符之前，返回空路径
 Path vsg::fileExtension(const Path& path)
 {
     auto dot = path.find_last_of('.');
@@ -302,6 +356,11 @@ Path vsg::fileExtension(const Path& path)
     return path.substr(dot);
 }
 
+// 获取小写文件扩展名
+// path: 完整路径
+// pruneExtras: 是否修剪额外字符（如查询参数）
+// 返回: 小写的文件扩展名
+// 将文件扩展名转换为小写，可选择性地移除查询参数等额外字符
 Path vsg::lowerCaseFileExtension(const Path& path, bool pruneExtras)
 {
     Path ext = fileExtension(path);
@@ -316,6 +375,10 @@ Path vsg::lowerCaseFileExtension(const Path& path, bool pruneExtras)
     return ext;
 }
 
+// 获取简单文件名（不包含扩展名）
+// path: 完整路径
+// 返回: 文件名部分（不包含扩展名）
+// 如果路径以相对路径结尾，返回空路径
 Path vsg::simpleFilename(const Path& path)
 {
     if (trailingRelativePath(path)) return {};
@@ -338,6 +401,10 @@ Path vsg::simpleFilename(const Path& path)
     }
 }
 
+// 检查路径是否以相对路径结尾
+// path: 要检查的路径
+// 返回: 如果路径以"."或".."结尾则返回true
+// 检查路径是否以相对路径标记（"."或".."）结尾
 bool vsg::trailingRelativePath(const Path& path)
 {
     if (path == ".") return true;
@@ -356,6 +423,10 @@ bool vsg::trailingRelativePath(const Path& path)
     return false;
 }
 
+// 移除文件扩展名
+// path: 完整路径
+// 返回: 移除扩展名后的路径
+// 如果路径以相对路径结尾，返回原路径
 Path vsg::removeExtension(const Path& path)
 {
     if (trailingRelativePath(path)) return path;

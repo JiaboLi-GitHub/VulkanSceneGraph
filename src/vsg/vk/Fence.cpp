@@ -15,6 +15,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建围栏对象
+// device: 设备对象
+// flags: 围栏创建标志
+// 围栏用于同步CPU和GPU，等待命令缓冲区执行完成
 Fence::Fence(Device* device, VkFenceCreateFlags flags) :
     _device(device)
 {
@@ -29,6 +33,8 @@ Fence::Fence(Device* device, VkFenceCreateFlags flags) :
     }
 }
 
+// 析构函数：销毁围栏对象
+// 销毁Vulkan围栏
 Fence::~Fence()
 {
     if (_vkFence)
@@ -37,6 +43,8 @@ Fence::~Fence()
     }
 }
 
+// 重置围栏和依赖项
+// 重置所有依赖的信号量和命令缓冲区的提交计数，然后重置围栏
 void Fence::resetFenceAndDependencies()
 {
     for (auto& semaphore : _dependentSemaphores)
@@ -55,11 +63,18 @@ void Fence::resetFenceAndDependencies()
     reset();
 }
 
+// 等待围栏
+// timeout: 超时时间（纳秒）
+// 返回: Vulkan结果
+// 等待围栏被信号（表示命令缓冲区执行完成）
 VkResult Fence::wait(uint64_t timeout) const
 {
     return vkWaitForFences(*_device, 1, &_vkFence, VK_TRUE, timeout);
 }
 
+// 重置围栏
+// 返回: Vulkan结果
+// 将围栏重置为未信号状态
 VkResult Fence::reset() const
 {
     return vkResetFences(*_device, 1, &_vkFence);

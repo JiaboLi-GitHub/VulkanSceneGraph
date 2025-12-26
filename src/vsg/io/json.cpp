@@ -23,17 +23,26 @@ using namespace vsg;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// json ReaderWriter
+// json ReaderWriter - JSON文件读取器/写入器
 //
+// 构造函数：创建JSON读取器/写入器对象
+// JSON格式用于存储元数据和配置信息
 json::json()
 {
 }
 
+// 检查扩展名是否支持
+// ext: 文件扩展名
+// 返回: 如果扩展名为.json则返回true
 bool json::supportedExtension(const Path& ext) const
 {
     return ext == ".json";
 }
 
+// 从输入流读取JSON文件（内部方法）
+// fin: 输入流对象
+// 返回: 解析后的对象（Object或Objects）
+// 解析JSON文件，支持JSON对象和JSON数组两种格式
 ref_ptr<Object> json::_read(std::istream& fin, ref_ptr<const Options>) const
 {
     fin.seekg(0, fin.end);
@@ -50,12 +59,14 @@ ref_ptr<Object> json::_read(std::istream& fin, ref_ptr<const Options>) const
 
     ref_ptr<Object> result;
 
-    // skip white space
+    // 跳过空白字符
     parser.pos = parser.buffer.find_first_not_of(" \t\r\n", 0);
     if (parser.pos == std::string::npos) return {};
 
+    // 根据第一个字符判断是JSON对象还是JSON数组
     if (parser.buffer[parser.pos] == '{')
     {
+        // JSON对象
         JSONtoMetaDataSchema schema;
         parser.read_object(schema);
         result = schema.object;
@@ -64,6 +75,7 @@ ref_ptr<Object> json::_read(std::istream& fin, ref_ptr<const Options>) const
     }
     else if (parser.buffer[parser.pos] == '[')
     {
+        // JSON数组
         JSONtoMetaDataSchema schema;
         parser.read_array(schema);
         result = schema.objects;

@@ -19,10 +19,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建实例绘制命令节点
+// 实例绘制命令节点用于执行实例化无索引绘制（vkCmdDraw），从InstanceNode获取实例数据
 InstanceDraw::InstanceDraw()
 {
 }
 
+// 拷贝构造函数：从另一个实例绘制命令节点创建新的实例绘制命令节点
+// rhs: 要拷贝的实例绘制命令节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝绘制参数（顶点数量、首顶点）和顶点数组
 InstanceDraw::InstanceDraw(const InstanceDraw& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     vertexCount(rhs.vertexCount),
@@ -32,10 +38,15 @@ InstanceDraw::InstanceDraw(const InstanceDraw& rhs, const CopyOp& copyop) :
 {
 }
 
+// 析构函数：销毁实例绘制命令节点
 InstanceDraw::~InstanceDraw()
 {
 }
 
+// 比较两个实例绘制命令节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、顶点数量、首顶点、首绑定点和顶点数组
 int InstanceDraw::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -48,6 +59,9 @@ int InstanceDraw::compare(const Object& rhs_object) const
     return compare_pointer_container(arrays, rhs.arrays);
 }
 
+// 分配顶点数组
+// arrayData: 数据列表
+// 将数据列表转换为BufferInfo列表
 void InstanceDraw::assignArrays(const DataList& arrayData)
 {
     arrays.clear();
@@ -58,6 +72,9 @@ void InstanceDraw::assignArrays(const DataList& arrayData)
     }
 }
 
+// 从输入流读取实例绘制命令节点对象
+// input: 输入流对象
+// 读取首绑定点、顶点数组和绘制参数（顶点数量、首顶点）
 void InstanceDraw::read(Input& input)
 {
     Command::read(input);
@@ -72,11 +89,14 @@ void InstanceDraw::read(Input& input)
     }
     assignArrays(dataList);
 
-    // vkCmdDraw settings
+    // vkCmdDraw设置
     input.read("vertexCount", vertexCount);
     input.read("firstVertex", firstVertex);
 }
 
+// 将实例绘制命令节点对象写入输出流
+// output: 输出流对象
+// 写入首绑定点、顶点数组和绘制参数
 void InstanceDraw::write(Output& output) const
 {
     Command::write(output);
@@ -91,21 +111,25 @@ void InstanceDraw::write(Output& output) const
             output.writeObject("Array", nullptr);
     }
 
-    // vkCmdDrawIndexed settings
+    // vkCmdDrawIndexed设置
     output.write("vertexCount", vertexCount);
     output.write("firstVertex", firstVertex);
 }
 
+// 编译实例绘制命令节点
+// context: 编译上下文对象
+// 检查顶点数组是否需要复制到GPU，如果需要则创建缓冲区并传输数据
 void InstanceDraw::compile(Context& context)
 {
     if (arrays.empty())
     {
-        // InstanceDraw does not contain required arrays and indices
+        // InstanceDraw不包含必需的数组和索引
         return;
     }
 
     auto deviceID = context.deviceID;
 
+    // 检查哪些顶点数组需要复制到GPU
     bool requiresCreateAndCopy = false;
     for (auto& array : arrays)
     {
@@ -116,6 +140,7 @@ void InstanceDraw::compile(Context& context)
         }
     }
 
+    // 如果需要，创建缓冲区并传输数据
     if (requiresCreateAndCopy)
     {
         createBufferAndTransferData(context, arrays, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_SHARING_MODE_EXCLUSIVE);
@@ -128,8 +153,12 @@ void InstanceDraw::compile(Context& context)
     }
 }
 
+// 记录实例绘制命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 从命令缓冲区获取InstanceNode，合并顶点数组和实例数据，绑定顶点缓冲区并执行vkCmdDraw命令
 void InstanceDraw::record(CommandBuffer& commandBuffer) const
 {
+    // 从命令缓冲区获取InstanceNode（必须存在）
     auto instanceNode = commandBuffer.instanceNode;
     if (!instanceNode)
     {
@@ -140,30 +169,36 @@ void InstanceDraw::record(CommandBuffer& commandBuffer) const
     auto deviceID = commandBuffer.deviceID;
     VkCommandBuffer cmdBuffer{commandBuffer};
 
+    // 准备顶点缓冲区列表
     std::vector<VkBuffer> vkBuffers;
     std::vector<VkDeviceSize> offsets;
 
     vkBuffers.reserve(8);
     offsets.reserve(8);
 
+    // Lambda函数：将BufferInfo添加到缓冲区列表
     auto assignBufferInfo = [&](const ref_ptr<BufferInfo>& bufferInfo) -> void {
         vkBuffers.push_back(bufferInfo->buffer->vk(deviceID));
         offsets.push_back(bufferInfo->offset);
     };
 
+    // 添加本地顶点数组
     for (auto& bi : arrays)
     {
         assignBufferInfo(bi);
     }
 
+    // 添加InstanceNode的实例数据（颜色、平移、旋转、缩放）
     if (instanceNode->colors) assignBufferInfo(instanceNode->colors);
     if (instanceNode->translations) assignBufferInfo(instanceNode->translations);
     if (instanceNode->rotations) assignBufferInfo(instanceNode->rotations);
     if (instanceNode->scales) assignBufferInfo(instanceNode->scales);
 
-    // TODO: will need to get the values to apply by combing the inherited InstanceNode values with local arrays
+    // TODO: 需要合并继承的InstanceNode值与本地数组的值
+    // 绑定顶点缓冲区
     vkCmdBindVertexBuffers(cmdBuffer, firstBinding, static_cast<uint32_t>(vkBuffers.size()), vkBuffers.data(), offsets.data());
 
     // vsg::info("InstanceDraw::record(CommandBuffer& commandBuffer) vkCmdDraw vkBuffers.size() = ", vkBuffers.size(), ", vertexCount = ", vertexCount, ", instanceNode->instanceCount = ", instanceNode->instanceCount);
+    // 执行实例化无索引绘制命令（使用InstanceNode的实例数量和首实例）
     vkCmdDraw(cmdBuffer, vertexCount, instanceNode->instanceCount, firstVertex, instanceNode->firstInstance);
 }

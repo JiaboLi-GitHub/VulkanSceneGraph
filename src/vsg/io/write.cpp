@@ -18,6 +18,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 将对象写入文件
+// object: 要写入的对象
+// filename: 文件名路径
+// options: 选项对象
+// 返回: 如果成功写入则返回true
+// 根据文件扩展名选择合适的写入器，支持共享对象缓存
 bool vsg::write(ref_ptr<Object> object, const Path& filename, ref_ptr<const Options> options)
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "write", COLOR_WRITE);
@@ -25,9 +31,10 @@ bool vsg::write(ref_ptr<Object> object, const Path& filename, ref_ptr<const Opti
     bool fileWritten = false;
     if (options)
     {
-        // don't write the file if it's already contained in the SharedObjects
+        // 如果文件已包含在共享对象中，不写入文件
         if (options->sharedObjects && options->sharedObjects->contains(filename, options)) return true;
 
+        // 如果选项中有读取器/写入器列表，按顺序尝试
         if (!options->readerWriters.empty())
         {
             for (auto& readerWriter : options->readerWriters)
@@ -38,9 +45,10 @@ bool vsg::write(ref_ptr<Object> object, const Path& filename, ref_ptr<const Opti
         }
     }
 
+    // 如果写入器列表中没有成功写入，回退到使用原生VSG格式
     if (!fileWritten)
     {
-        // fallback to using native VSG if extension is compatible
+        // 如果扩展名兼容，回退到使用原生VSG
         auto ext = vsg::lowerCaseFileExtension(filename);
         if (ext == ".vsga" || ext == ".vsgt" || ext == ".vsgb")
         {

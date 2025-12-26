@@ -24,11 +24,18 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 从文件读取对象
+// filename: 文件名路径
+// options: 选项对象
+// 返回: 读取的对象，如果失败则返回空指针
+// 根据文件扩展名选择合适的读取器，支持共享对象缓存和动态对象处理
 ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "read", COLOR_READ);
 
+    // Lambda函数：实际读取文件的函数
     auto read_file = [&]() -> ref_ptr<Object> {
+        // 如果选项中有读取器/写入器列表，按顺序尝试
         if (options && !options->readerWriters.empty())
         {
             for (auto& readerWriter : options->readerWriters)
@@ -39,6 +46,7 @@ ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
             return {};
         }
 
+        // 根据文件扩展名选择读取器
         auto ext = vsg::lowerCaseFileExtension(filename);
 
         if (ext == ".vsga" || ext == ".vsgt" || ext == ".vsgb")
@@ -68,11 +76,12 @@ ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
         }
         else
         {
-            // no means of loading file
+            // 没有加载文件的方法
             return {};
         }
     };
 
+    // 如果使用共享对象缓存，通过缓存读取
     if (options && options->sharedObjects && options->sharedObjects->suitable(filename))
     {
         auto loadedObject = LoadedObject::create(filename, options);
@@ -80,9 +89,10 @@ ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
         options->sharedObjects->share(loadedObject, [&](auto load) {
             load->object = read_file();
 
+            // 如果对象需要动态处理，查找并传播动态对象
             if (load->object && options && options->findDynamicObjects && options->propagateDynamicObjects)
             {
-                // invoke the find and propagate visitors to collate all the dynamic objects that will need to be cloned.
+                // 调用查找和传播访问者，收集所有需要克隆的动态对象
 
                 std::scoped_lock<std::mutex> fdo_lock(options->findDynamicObjects->mutex);
 
@@ -97,6 +107,7 @@ ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
             }
         });
 
+        // 如果有动态对象，创建副本
         if (!loadedObject->dynamicObjects.empty())
         {
             vsg::CopyOp copyop;
@@ -119,6 +130,11 @@ ref_ptr<Object> vsg::read(const Path& filename, ref_ptr<const Options> options)
     }
 }
 
+// 从多个文件读取对象（支持多线程）
+// filenames: 文件名路径列表
+// options: 选项对象
+// 返回: 文件名到对象的映射
+// 如果提供了操作线程且文件数量大于1，则使用多线程并行读取
 PathObjects vsg::read(const Paths& filenames, ref_ptr<const Options> options)
 {
     CPU_INSTRUMENTATION_L1_NC(options ? options->instrumentation.get() : nullptr, "read", COLOR_READ);
@@ -128,14 +144,16 @@ PathObjects vsg::read(const Paths& filenames, ref_ptr<const Options> options)
 
     PathObjects entries;
 
+    // 如果有多线程支持且文件数量大于1，使用多线程读取
     if (operationThreads && filenames.size() > 1)
     {
-        // set up the entries container for operations to write to.
+        // 设置条目容器供操作写入
         for (const auto& filename : filenames)
         {
             entries[filename] = nullptr;
         }
 
+        // 读取操作类：在后台线程中读取文件
         struct ReadOperation : public Operation
         {
             ReadOperation(const Path& f, ref_ptr<const Options> opt, ref_ptr<Object>& obj, ref_ptr<Latch> l) :
@@ -156,24 +174,24 @@ PathObjects vsg::read(const Paths& filenames, ref_ptr<const Options> options)
             ref_ptr<Latch> latch;
         };
 
-        // use latch to synchronize this thread with the file reading threads
+        // 使用latch同步此线程与文件读取线程
         auto latch = Latch::create(static_cast<int>(filenames.size()));
 
-        // add operations
+        // 添加操作
         for (auto& [filename, object] : entries)
         {
             operationThreads->add(ref_ptr<Operation>(new ReadOperation(filename, options, object, latch)));
         }
 
-        // use this thread to read the files as well
+        // 也使用此线程读取文件
         operationThreads->run();
 
-        // wait till all the read operations have completed
+        // 等待所有读取操作完成
         latch->wait();
     }
     else
     {
-        // run reads single threaded
+        // 单线程运行读取
         for (auto& filename : filenames)
         {
             if (filename)

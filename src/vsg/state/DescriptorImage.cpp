@@ -21,17 +21,31 @@ using namespace vsg;
 //
 // DescriptorImage
 //
+// 构造函数：创建描述符图像对象（默认）
+// 描述符图像用于将图像和采样器绑定到描述符集（组合图像采样器、采样图像、存储图像等）
+// 默认类型为组合图像采样器
 DescriptorImage::DescriptorImage() :
     Inherit(0, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
 {
 }
 
+// 拷贝构造函数：从另一个描述符图像对象创建新的描述符图像对象
+// rhs: 要拷贝的描述符图像对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝图像信息列表
 DescriptorImage::DescriptorImage(const DescriptorImage& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     imageInfoList(copyop(rhs.imageInfoList))
 {
 }
 
+// 构造函数：使用采样器和数据对象创建描述符图像对象
+// sampler: 采样器对象
+// data: 图像数据对象
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型（组合图像采样器、采样图像等）
+// 从采样器和数据创建ImageInfo
 DescriptorImage::DescriptorImage(ref_ptr<Sampler> sampler, ref_ptr<Data> data, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType)
 {
@@ -41,12 +55,22 @@ DescriptorImage::DescriptorImage(ref_ptr<Sampler> sampler, ref_ptr<Data> data, u
     }
 }
 
+// 构造函数：使用图像信息对象创建描述符图像对象
+// imageInfo: 图像信息对象（包含采样器、图像视图和图像布局）
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型
 DescriptorImage::DescriptorImage(ref_ptr<ImageInfo> imageInfo, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType)
 {
     imageInfoList.push_back(imageInfo);
 }
 
+// 构造函数：使用图像信息列表创建描述符图像对象
+// in_imageInfoList: 图像信息列表
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型
 DescriptorImage::DescriptorImage(const ImageInfoList& in_imageInfoList, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType),
     imageInfoList(in_imageInfoList)
@@ -103,25 +127,35 @@ void DescriptorImage::write(Output& output) const
     }
 }
 
+// 编译描述符图像
+// context: 编译上下文对象
+// 编译所有采样器和图像视图，如果需要则计算Mipmap级别，然后复制图像数据或分配给传输任务
 void DescriptorImage::compile(Context& context)
 {
     if (imageInfoList.empty()) return;
 
     auto transferTask = context.transferTask.get();
 
+    // 编译所有图像信息
     for (auto& imageInfo : imageInfoList)
     {
+        // 编译采样器（如果存在）
         if (imageInfo->sampler) imageInfo->sampler->compile(context);
+        
+        // 编译图像视图（如果存在）
         if (imageInfo->imageView)
         {
+            // 如果Mipmap级别为0，计算所需的Mipmap级别
             if (imageInfo->imageView->image->mipLevels == 0)
             {
                 imageInfo->computeNumMipMapLevels();
             }
 
             auto& imageView = *imageInfo->imageView;
+            // 编译图像视图（这会编译图像并分配内存）
             imageView.compile(context);
 
+            // 如果没有传输任务且图像数据已修改，直接复制图像数据
             if (!transferTask && imageView.image && imageView.image->syncModifiedCount(context.deviceID))
             {
                 const auto& image = *imageView.image;
@@ -130,14 +164,19 @@ void DescriptorImage::compile(Context& context)
         }
     }
 
+    // 如果有传输任务，将图像信息列表分配给传输任务
     if (transferTask) transferTask->assign(imageInfoList);
 }
 
+// 将描述符图像信息分配到Vulkan写入描述符集结构
+// context: 编译上下文对象
+// wds: 输出参数，用于填充Vulkan写入描述符集结构
+// 从临时内存分配图像信息数组，填充所有图像信息（采样器句柄、图像视图句柄、图像布局）
 void DescriptorImage::assignTo(Context& context, VkWriteDescriptorSet& wds) const
 {
     Descriptor::assignTo(context, wds);
 
-    // convert from VSG to Vk
+    // 从VSG转换为Vulkan格式
     auto pImageInfo = context.scratchMemory->allocate<VkDescriptorImageInfo>(imageInfoList.size());
     wds.descriptorCount = static_cast<uint32_t>(imageInfoList.size());
     wds.pImageInfo = pImageInfo;
@@ -146,20 +185,25 @@ void DescriptorImage::assignTo(Context& context, VkWriteDescriptorSet& wds) cons
         auto& imageInfo = imageInfoList[i];
 
         VkDescriptorImageInfo& info = pImageInfo[i];
+        // 设置采样器句柄（如果存在）
         if (imageInfo->sampler)
             info.sampler = imageInfo->sampler->vk(context.deviceID);
         else
             info.sampler = 0;
 
+        // 设置图像视图句柄（如果存在）
         if (imageInfo->imageView)
             info.imageView = imageInfo->imageView->vk(context.deviceID);
         else
             info.imageView = 0;
 
+        // 设置图像布局
         info.imageLayout = imageInfo->imageLayout;
     }
 }
 
+// 获取描述符数量
+// 返回: 描述符数量（图像信息列表的大小）
 uint32_t DescriptorImage::getNumDescriptors() const
 {
     return static_cast<uint32_t>(imageInfoList.size());

@@ -59,11 +59,16 @@ using namespace vsg;
 
 #define INLINE_TRAVERSE 0
 
+// 构造函数：初始化记录遍历器
+// in_maxSlots: 最大槽位配置
+// in_bins: bin集合
+// 创建状态对象，计算bin范围，并初始化bin数组
 RecordTraversal::RecordTraversal(const Slots& in_maxSlots, const std::set<Bin*>& in_bins) :
     state(new State(in_maxSlots))
 {
     CPU_INSTRUMENTATION_L1_C(instrumentation, COLOR_RECORD);
 
+    // 计算bin的最小和最大编号
     minimumBinNumber = 0;
     int32_t maximumBinNumber = 0;
     for (const auto& bin : in_bins)
@@ -72,8 +77,10 @@ RecordTraversal::RecordTraversal(const Slots& in_maxSlots, const std::set<Bin*>&
         if (bin->binNumber > maximumBinNumber) maximumBinNumber = bin->binNumber;
     }
 
+    // 调整bin数组大小以容纳所有bin（从最小到最大）
     bins.resize((maximumBinNumber - minimumBinNumber) + 1);
 
+    // 将bin放入数组中（使用偏移量索引）
     for (auto& bin : in_bins)
     {
         bins[bin->binNumber - minimumBinNumber] = bin;
@@ -85,6 +92,8 @@ RecordTraversal::~RecordTraversal()
     CPU_INSTRUMENTATION_L2(instrumentation);
 }
 
+// 获取命令缓冲区
+// 返回: 当前状态中的命令缓冲区指针
 CommandBuffer* RecordTraversal::getCommandBuffer()
 {
     return state->_commandBuffer;
@@ -95,19 +104,28 @@ uint32_t RecordTraversal::deviceID() const
     return state->_commandBuffer->deviceID;
 }
 
+// 设置帧戳
+// fs: 帧戳对象指针
+// 用于跟踪当前帧的帧计数和时间戳
 void RecordTraversal::setFrameStamp(FrameStamp* fs)
 {
     frameStamp = fs;
 }
 
+// 设置数据库分页器
+// dp: 数据库分页器对象指针
+// 用于处理分页LOD的加载和剔除
 void RecordTraversal::setDatabasePager(DatabasePager* dp)
 {
     if (dp == databasePager) return;
 
     databasePager = dp;
+    // 如果提供了分页器，获取其剔除的分页LOD列表
     culledPagedLODs = dp ? dp->culledPagedLODs.get() : nullptr;
 }
 
+// 清除所有bin
+// 清空所有bin中的命令，为下一帧做准备
 void RecordTraversal::clearBins()
 {
     CPU_INSTRUMENTATION_L2_NC(instrumentation, "RecordTraversal clearBins", COLOR_RECORD_L2);
@@ -150,21 +168,26 @@ void RecordTraversal::apply(const QuadGroup& quadGroup)
 #endif
 }
 
+// 访问LOD节点：根据距离选择合适细节级别的子节点
+// lod: LOD节点对象
+// 计算LOD距离，根据屏幕高度比例选择可见的子节点进行遍历
 void RecordTraversal::apply(const LOD& lod)
 {
     GPU_INSTRUMENTATION_L2_NCO(instrumentation, *getCommandBuffer(), "LOD", COLOR_RECORD_L2, &lod);
 
     const auto& sphere = lod.bound;
 
-    // check if lod bounding sphere is in view frustum.
+    // 检查LOD边界球是否在视锥体内
     auto lodDistance = state->lodDistance(sphere);
     if (lodDistance < 0.0)
     {
-        return;
+        return;  // 不在视锥体内，不渲染
     }
 
+    // 如果视图依赖状态有LOD缩放，应用缩放
     if (viewDependentState) lodDistance *= viewDependentState->LODScale;
 
+    // 遍历子节点，选择第一个可见的（根据屏幕高度比例）
     for (auto& child : lod.children)
     {
         auto cutoff = lodDistance * child.minimumScreenHeightRatio;
@@ -172,11 +195,14 @@ void RecordTraversal::apply(const LOD& lod)
         if (child_visible)
         {
             child.node->accept(*this);
-            return;
+            return;  // 找到可见子节点后立即返回
         }
     }
 }
 
+// 访问分页LOD节点：处理分页LOD的加载和渲染
+// plod: 分页LOD节点对象
+// 检查高分辨率子节点是否可见，如果不可用则请求加载，否则渲染低分辨率子节点
 void RecordTraversal::apply(const PagedLOD& plod)
 {
     GPU_INSTRUMENTATION_L2_NCO(instrumentation, *getCommandBuffer(), "PagedLOD", COLOR_PAGER, &plod);
@@ -184,21 +210,23 @@ void RecordTraversal::apply(const PagedLOD& plod)
     const auto& sphere = plod.bound;
     auto frameCount = frameStamp->frameCount;
 
-    // check if lod bounding sphere is in view frustum.
+    // 检查LOD边界球是否在视锥体内
     auto lodDistance = state->lodDistance(sphere);
     if (lodDistance < 0.0)
     {
+        // 如果高分辨率最近使用过但现在被剔除，记录到剔除列表
         if ((frameCount - plod.frameHighResLastUsed) > 1 && culledPagedLODs)
         {
             culledPagedLODs->highresCulled.emplace_back(&plod);
         }
 
-        return;
+        return;  // 不在视锥体内，不渲染
     }
 
+    // 如果视图依赖状态有LOD缩放，应用缩放
     if (viewDependentState) lodDistance *= viewDependentState->LODScale;
 
-    // check the high res child to see if it's visible
+    // 检查高分辨率子节点是否可见
     {
         const auto& child = plod.children[0];
 
@@ -206,7 +234,9 @@ void RecordTraversal::apply(const PagedLOD& plod)
         bool child_visible = sphere.r > cutoff;
         if (child_visible)
         {
+            // 更新高分辨率最后使用帧计数
             auto previousHighResUsed = plod.frameHighResLastUsed.exchange(frameCount);
+            // 如果之前被剔除，现在需要高分辨率，记录到新需求列表
             if (culledPagedLODs && ((frameCount - previousHighResUsed) > 1))
             {
                 culledPagedLODs->newHighresRequired.emplace_back(&plod);
@@ -214,19 +244,20 @@ void RecordTraversal::apply(const PagedLOD& plod)
 
             if (child.node)
             {
-                // high res visible and available so traverse it
+                // 高分辨率可见且可用，遍历它
                 child.node->accept(*this);
                 return;
             }
             else if (databasePager)
             {
+                // 高分辨率不可用，请求加载
                 auto priority = sphere.r / cutoff;
                 exchange_if_greater(plod.priority, priority);
 
                 auto previousRequestCount = plod.requestCount.fetch_add(1);
                 if (previousRequestCount == 0)
                 {
-                    // we are the first request so tell the databasePager about it
+                    // 我们是第一个请求者，告诉数据库分页器
                     databasePager->request(ref_ptr<PagedLOD>(const_cast<PagedLOD*>(&plod)));
                 }
                 else
@@ -237,6 +268,7 @@ void RecordTraversal::apply(const PagedLOD& plod)
         }
         else
         {
+            // 高分辨率不可见，如果最近使用过，记录到剔除列表
             if (culledPagedLODs && ((frameCount - plod.frameHighResLastUsed) <= 1))
             {
                 culledPagedLODs->highresCulled.emplace_back(&plod);
@@ -244,7 +276,7 @@ void RecordTraversal::apply(const PagedLOD& plod)
         }
     }
 
-    // check the low res child to see if it's visible
+    // 检查低分辨率子节点是否可见
     {
         const auto& child = plod.children[1];
         auto cutoff = lodDistance * child.minimumScreenHeightRatio;
@@ -253,6 +285,7 @@ void RecordTraversal::apply(const PagedLOD& plod)
         {
             if (child.node)
             {
+                // 低分辨率可见且可用，遍历它
                 child.node->accept(*this);
             }
         }
@@ -698,6 +731,11 @@ void RecordTraversal::apply(const CommandGraph& commandGraph)
     }
 }
 
+// 添加节点到bin
+// binNumber: bin编号
+// value: 排序值（用于深度排序等）
+// node: 要添加的节点
+// 将节点添加到指定编号的bin中，使用偏移量索引bin数组
 void RecordTraversal::addToBin(int32_t binNumber, double value, const Node* node)
 {
     bins[binNumber - minimumBinNumber]->add(state, value, node);

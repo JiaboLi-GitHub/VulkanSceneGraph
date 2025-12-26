@@ -22,9 +22,12 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建实例扩展对象
+// instance: Vulkan实例对象
+// 实例扩展对象管理实例扩展函数指针的获取，支持调试工具和校准时间戳等扩展
 InstanceExtensions::InstanceExtensions(const Instance* instance)
 {
-    // VK_EXT_debug_utils
+    // VK_EXT_debug_utils - 调试工具扩展
     instance->getProcAddr(vkSetDebugUtilsObjectNameEXT, "vkSetDebugUtilsObjectNameEXT");
     instance->getProcAddr(vkSetDebugUtilsObjectTagEXT, "vkSetDebugUtilsObjectTagEXT");
     instance->getProcAddr(vkQueueBeginDebugUtilsLabelEXT, "vkQueueBeginDebugUtilsLabelEXT");
@@ -37,7 +40,7 @@ InstanceExtensions::InstanceExtensions(const Instance* instance)
     instance->getProcAddr(vkDestroyDebugUtilsMessengerEXT, "vkDestroyDebugUtilsMessengerEXT");
     instance->getProcAddr(vkSubmitDebugUtilsMessageEXT, "vkSubmitDebugUtilsMessageEXT");
 
-    // VK_EXT_calibrated_timestamps
+    // VK_EXT_calibrated_timestamps - 校准时间戳扩展
     instance->getProcAddr(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT, "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR", "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
     instance->getProcAddr(vkGetCalibratedTimestampsEXT, "vkGetCalibratedTimestampsKHR", "vkGetCalibratedTimestampsEXT");
 }

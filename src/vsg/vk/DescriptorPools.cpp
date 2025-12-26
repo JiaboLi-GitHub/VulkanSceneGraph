@@ -17,19 +17,28 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建描述符池集合对象
+// in_device: 设备对象
+// 描述符池集合管理多个描述符池，用于分配描述符集
 DescriptorPools::DescriptorPools(ref_ptr<Device> in_device) :
     device(in_device)
 {
 }
 
+// 析构函数：销毁描述符池集合对象
 DescriptorPools::~DescriptorPools()
 {
 }
 
+// 获取要使用的描述符池大小
+// maxSets: 输入输出参数，最大描述符集数量
+// descriptorPoolSizes: 输入输出参数，描述符池大小列表
+// 根据预留需求和缩放因子计算要使用的描述符池大小
 void DescriptorPools::getDescriptorPoolSizesToUse(uint32_t& maxSets, DescriptorPoolSizes& descriptorPoolSizes)
 {
     if (reserve_count > 0)
     {
+        // 如果最小最大集数大于预留最大集数，按比例缩放描述符数量
         if (minimum_maxSets > reserve_maxSets)
         {
             for (auto& dps : reserve_descriptorPoolSizes)
@@ -44,6 +53,7 @@ void DescriptorPools::getDescriptorPoolSizesToUse(uint32_t& maxSets, DescriptorP
             maxSets = minimum_maxSets;
         }
 
+        // 合并预留的描述符池大小
         for (auto& [type, descriptorCount] : reserve_descriptorPoolSizes)
         {
             auto itr = descriptorPoolSizes.begin();
@@ -63,19 +73,24 @@ void DescriptorPools::getDescriptorPoolSizesToUse(uint32_t& maxSets, DescriptorP
         }
     }
 
+    // 计算最小最大集数（考虑缩放因子和最大限制）
     minimum_maxSets = std::min(maximum_maxSets, static_cast<uint32_t>(static_cast<double>(maxSets) * scale_maxSets));
 
+    // 清除预留数据
     reserve_count = 0;
     reserve_maxSets = 0;
     reserve_descriptorPoolSizes.clear();
 }
 
+// 预留资源
+// requirements: 资源需求
+// 根据资源需求预留描述符池资源，如果现有池不足则创建新的描述符池
 void DescriptorPools::reserve(const ResourceRequirements& requirements)
 {
     auto maxSets = requirements.computeNumDescriptorSets();
     auto descriptorPoolSizes = requirements.computeDescriptorPoolSizes();
 
-    // update the variables tracing all reserve calls.
+    // 更新跟踪所有预留调用的变量
     ++reserve_count;
     reserve_maxSets += maxSets;
     for (auto& dps : descriptorPoolSizes)
@@ -87,7 +102,7 @@ void DescriptorPools::reserve(const ResourceRequirements& requirements)
             reserve_descriptorPoolSizes.push_back(dps);
     }
 
-    // compute the total available resources
+    // 计算总可用资源
     uint32_t available_maxSets = 0;
     DescriptorPoolSizes available_descriptorPoolSizes;
     for (auto& descriptorPool : descriptorPools)
@@ -95,7 +110,7 @@ void DescriptorPools::reserve(const ResourceRequirements& requirements)
         descriptorPool->available(available_maxSets, available_descriptorPoolSizes);
     }
 
-    // compute the additional required resources
+    // 计算额外需要的资源
     auto required_maxSets = maxSets;
     if (available_maxSets < required_maxSets)
         required_maxSets -= available_maxSets;
@@ -106,6 +121,7 @@ void DescriptorPools::reserve(const ResourceRequirements& requirements)
     for (const auto& [type, descriptorCount] : descriptorPoolSizes)
     {
         uint32_t adjustedDescriptorCount = descriptorCount;
+        // 从可用资源中减去已分配的部分
         for (auto itr = available_descriptorPoolSizes.begin(); itr != available_descriptorPoolSizes.end(); ++itr)
         {
             if (itr->type == type)
@@ -123,26 +139,32 @@ void DescriptorPools::reserve(const ResourceRequirements& requirements)
             required_descriptorPoolSizes.push_back(VkDescriptorPoolSize{type, adjustedDescriptorCount});
     }
 
-    // check if all the requirements have been met by existing availability
+    // 检查现有可用资源是否满足所有需求
     if (required_maxSets == 0 && required_descriptorPoolSizes.empty())
     {
         vsg::debug("DescriptorPools::reserve(const ResourceRequirements& requirements) enough resource in existing DescriptorPools");
         return;
     }
 
-    // not enough descriptor resources available so allocator new DescriptorPool.
+    // 描述符资源不足，分配新的描述符池
     getDescriptorPoolSizesToUse(required_maxSets, required_descriptorPoolSizes);
     descriptorPools.push_back(vsg::DescriptorPool::create(device, required_maxSets, required_descriptorPoolSizes));
 }
 
+// 分配描述符集
+// descriptorSetLayout: 描述符集布局
+// 返回: 描述符集实现对象
+// 从描述符池集合中分配描述符集，如果所有池都满则创建新的描述符池
 ref_ptr<DescriptorSet::Implementation> DescriptorPools::allocateDescriptorSet(DescriptorSetLayout* descriptorSetLayout)
 {
+    // 从后向前遍历描述符池（优先使用最新的池）
     for (auto itr = descriptorPools.rbegin(); itr != descriptorPools.rend(); ++itr)
     {
         auto dsi = (*itr)->allocateDescriptorSet(descriptorSetLayout);
         if (dsi) return dsi;
     }
 
+    // 如果所有池都满，创建新的描述符池
     DescriptorPoolSizes descriptorPoolSizes;
     descriptorSetLayout->getDescriptorPoolSizes(descriptorPoolSizes);
 

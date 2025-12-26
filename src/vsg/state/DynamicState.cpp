@@ -16,20 +16,30 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建动态状态对象（默认）
+// 动态状态用于定义可以在命令缓冲区中动态设置的状态（如视口、裁剪矩形、线宽、深度偏移等）
 DynamicState::DynamicState()
 {
 }
 
+// 拷贝构造函数：从另一个动态状态对象创建新的动态状态对象
+// ds: 要拷贝的动态状态对象
+// 拷贝动态状态列表
 DynamicState::DynamicState(const DynamicState& ds) :
     Inherit(ds),
     dynamicStates(ds.dynamicStates)
 {
 }
 
+// 析构函数：销毁动态状态对象
 DynamicState::~DynamicState()
 {
 }
 
+// 比较两个动态状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较动态状态容器
 int DynamicState::compare(const Object& rhs_object) const
 {
     int result = GraphicsPipelineState::compare(rhs_object);
@@ -39,6 +49,9 @@ int DynamicState::compare(const Object& rhs_object) const
     return compare_value_container(dynamicStates, rhs.dynamicStates);
 }
 
+// 从输入流读取动态状态对象
+// input: 输入流对象
+// 读取动态状态列表
 void DynamicState::read(Input& input)
 {
     GraphicsPipelineState::read(input);
@@ -50,6 +63,9 @@ void DynamicState::read(Input& input)
     }
 }
 
+// 将动态状态对象写入输出流
+// output: 输出流对象
+// 写入动态状态列表
 void DynamicState::write(Output& output) const
 {
     GraphicsPipelineState::write(output);
@@ -61,6 +77,10 @@ void DynamicState::write(Output& output) const
     }
 }
 
+// 应用动态状态到图形管线创建信息
+// context: 编译上下文对象
+// pipelineInfo: 图形管线创建信息（输出参数）
+// 从临时内存分配动态状态创建信息，填充动态状态列表，然后设置到管线创建信息中
 void DynamicState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipelineInfo) const
 {
     auto dynamicState = context.scratchMemory->allocate<VkPipelineDynamicStateCreateInfo>();

@@ -26,16 +26,26 @@ static std::set<vsg::Path> s_txt_extensionSupported{
     ".sh",
     ".bat"};
 
+// 检查扩展名是否支持
+// path: 文件路径
+// 返回: 如果扩展名支持则返回true
+// 检查文件扩展名是否在支持的文本文件扩展名集合中
 bool txt::extensionSupported(const vsg::Path& path)
 {
     return s_txt_extensionSupported.count(path);
 }
 
+// 构造函数：创建文本文件读取器对象
+// 支持多种文本文件格式（.txt、.text、.md、.json、.xml、.sh、.bat等）
 txt::txt() :
     supportedExtensions{s_txt_extensionSupported}
 {
 }
 
+// 从输入流读取文本文件（内部方法）
+// fin: 输入流对象
+// 返回: 包含文件内容的stringValue对象
+// 读取整个文件内容到stringValue对象中
 ref_ptr<Object> txt::_read(std::istream& fin, ref_ptr<const Options>) const
 {
     vsg::ref_ptr<vsg::stringValue> contents = vsg::stringValue::create();

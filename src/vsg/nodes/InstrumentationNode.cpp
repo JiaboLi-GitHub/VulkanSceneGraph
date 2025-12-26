@@ -16,6 +16,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建性能分析节点
+// 性能分析节点用于包装子节点，收集CPU和GPU性能数据，用于性能分析和调试
 InstrumentationNode::InstrumentationNode() :
     _level(1),
     _color(255, 255, 255, 255),
@@ -26,6 +28,10 @@ InstrumentationNode::InstrumentationNode() :
 {
 }
 
+// 拷贝构造函数：从另一个性能分析节点创建新的性能分析节点
+// rhs: 要拷贝的性能分析节点对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝级别、颜色、名称和性能分析源位置信息
 InstrumentationNode::InstrumentationNode(const InstrumentationNode& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     _level(rhs._level),
@@ -40,16 +46,23 @@ InstrumentationNode::InstrumentationNode(const InstrumentationNode& rhs, const C
     _sl_RecordTraversal.name = _name.c_str();
 }
 
+// 构造函数：使用子节点创建性能分析节点
+// in_child: 要包装的子节点
 InstrumentationNode::InstrumentationNode(ref_ptr<Node> in_child) :
     InstrumentationNode()
 {
     child = in_child;
 }
 
+// 析构函数：销毁性能分析节点
 InstrumentationNode::~InstrumentationNode()
 {
 }
 
+// 比较两个性能分析节点对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、级别、颜色和名称
 int InstrumentationNode::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -61,24 +74,36 @@ int InstrumentationNode::compare(const Object& rhs_object) const
     return compare_value(_name, rhs._name);
 }
 
+// 遍历访问者（非const版本）
+// visitor: 访问者对象
+// 使用CPU性能分析包装子节点的访问
 void InstrumentationNode::traverse(Visitor& visitor)
 {
     CpuInstrumentation cpuInst(visitor.getInstrumentation(), &_sl_Visitor, child.get());
     child->accept(visitor);
 }
 
+// 遍历常量访问者
+// visitor: 常量访问者对象
+// 使用CPU性能分析包装子节点的访问
 void InstrumentationNode::traverse(ConstVisitor& visitor) const
 {
     CpuInstrumentation cpuInst(visitor.getInstrumentation(), &_sl_ConstVisitor, child.get());
     child->accept(visitor);
 }
 
+// 遍历记录遍历器
+// rt: 记录遍历器对象
+// 使用GPU性能分析包装子节点的记录
 void InstrumentationNode::traverse(RecordTraversal& rt) const
 {
     GpuInstrumentation cpuInst(rt.instrumentation, &_sl_RecordTraversal, *rt.getCommandBuffer(), child.get());
     child->accept(rt);
 }
 
+// 设置性能分析颜色
+// color: 颜色值（用于在性能分析工具中显示）
+// 更新所有性能分析源位置的颜色
 void InstrumentationNode::setColor(uint_color color)
 {
     _color = color;
@@ -87,6 +112,9 @@ void InstrumentationNode::setColor(uint_color color)
     _sl_RecordTraversal.color = _color;
 }
 
+// 设置性能分析名称
+// name: 名称字符串（用于在性能分析工具中标识）
+// 更新所有性能分析源位置的名称
 void InstrumentationNode::setName(const std::string& name)
 {
     _name = name;
@@ -104,6 +132,9 @@ void InstrumentationNode::setName(const std::string& name)
     }
 }
 
+// 设置性能分析级别
+// level: 级别值（用于控制性能分析的详细程度）
+// 更新所有性能分析源位置的级别
 void InstrumentationNode::setLevel(uint32_t level)
 {
     _level = level;
@@ -112,6 +143,9 @@ void InstrumentationNode::setLevel(uint32_t level)
     _sl_RecordTraversal.level = _level;
 }
 
+// 从输入流读取性能分析节点对象
+// input: 输入流对象
+// 读取级别、颜色、名称和子节点
 void InstrumentationNode::read(Input& input)
 {
     Node::read(input);
@@ -131,6 +165,9 @@ void InstrumentationNode::read(Input& input)
     input.read("child", child);
 }
 
+// 将性能分析节点对象写入输出流
+// output: 输出流对象
+// 写入级别、颜色、名称和子节点
 void InstrumentationNode::write(Output& output) const
 {
     Node::write(output);

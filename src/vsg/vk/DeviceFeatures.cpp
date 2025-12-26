@@ -14,20 +14,29 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建设备特性对象
+// 设备特性对象管理Vulkan设备特性的启用和链式结构
 DeviceFeatures::DeviceFeatures()
 {
 }
 
+// 析构函数：销毁设备特性对象
+// 清理所有特性并释放内存
 DeviceFeatures::~DeviceFeatures()
 {
     clear();
 }
 
+// 获取物理设备特性
+// 返回: 物理设备特性引用
+// 获取基础物理设备特性（VkPhysicalDeviceFeatures）
 VkPhysicalDeviceFeatures& DeviceFeatures::get()
 {
     return get<VkPhysicalDeviceFeatures2, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2>().features;
 }
 
+// 清除所有特性
+// 释放所有特性的内存并清空特性列表
 void DeviceFeatures::clear()
 {
     for (auto& feature : _features)
@@ -38,11 +47,14 @@ void DeviceFeatures::clear()
     _features.clear();
 }
 
+// 获取特性数据指针（用于pNext链）
+// 返回: 特性链的头部指针，如果没有特性则返回nullptr
+// 将特性链接成pNext链，返回链的头部指针（用于Vulkan结构体的pNext字段）
 void* DeviceFeatures::data() const
 {
     if (_features.empty()) return nullptr;
 
-    // chain the Feature pNext pointers together
+    // 将特性pNext指针链接在一起
     FeatureHeader* previous = nullptr;
     for (auto itr = _features.rbegin(); itr != _features.rend(); ++itr)
     {
@@ -50,6 +62,6 @@ void* DeviceFeatures::data() const
         previous = itr->second.first;
     }
 
-    // return head of the chain
+    // 返回链的头部
     return const_cast<void*>(reinterpret_cast<const void*>(_features.begin()->second.first));
 }

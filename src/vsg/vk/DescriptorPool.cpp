@@ -20,6 +20,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建描述符池对象
+// device: 设备对象
+// in_maxSets: 最大描述符集数量
+// in_descriptorPoolSizes: 描述符池大小列表（每种描述符类型的数量）
+// 描述符池用于分配描述符集，管理描述符资源的分配和回收
 DescriptorPool::DescriptorPool(Device* device, uint32_t in_maxSets, const DescriptorPoolSizes& in_descriptorPoolSizes) :
     maxSets(in_maxSets),
     descriptorPoolSizes(in_descriptorPoolSizes),
@@ -32,7 +37,7 @@ DescriptorPool::DescriptorPool(Device* device, uint32_t in_maxSets, const Descri
     poolInfo.poolSizeCount = static_cast<uint32_t>(descriptorPoolSizes.size());
     poolInfo.pPoolSizes = descriptorPoolSizes.data();
     poolInfo.maxSets = maxSets;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT; // will we need VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT later?
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT; // 稍后是否需要VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT？
     poolInfo.pNext = nullptr;
 
     if (VkResult result = vkCreateDescriptorPool(*device, &poolInfo, _device->getAllocationCallbacks(), &_descriptorPool); result != VK_SUCCESS)
@@ -48,6 +53,8 @@ DescriptorPool::DescriptorPool(Device* device, uint32_t in_maxSets, const Descri
     vsg::debug("}");
 }
 
+// 析构函数：销毁描述符池对象
+// 销毁Vulkan描述符池
 DescriptorPool::~DescriptorPool()
 {
     if (_descriptorPool)
@@ -56,6 +63,10 @@ DescriptorPool::~DescriptorPool()
     }
 }
 
+// 分配描述符集
+// descriptorSetLayout: 描述符集布局
+// 返回: 描述符集实现对象，如果分配失败则返回空指针
+// 从描述符池分配一个描述符集，优先从回收列表中重用兼容的描述符集
 ref_ptr<DescriptorSet::Implementation> DescriptorPool::allocateDescriptorSet(DescriptorSetLayout* descriptorSetLayout)
 {
     std::scoped_lock<std::mutex> lock(mutex);
@@ -65,12 +76,13 @@ ref_ptr<DescriptorSet::Implementation> DescriptorPool::allocateDescriptorSet(Des
         return {};
     }
 
+    // 首先尝试从回收列表中重用兼容的描述符集
     for (auto itr = _recyclingList.begin(); itr != _recyclingList.end(); ++itr)
     {
         auto dsi = *itr;
         if (dsi->_descriptorSetLayout.get() == descriptorSetLayout || compare_value_container(dsi->_descriptorSetLayout->bindings, descriptorSetLayout->bindings) == 0)
         {
-            // swap ownership so that DescriptorSet::Implementation now "has a" reference to this DescriptorPool
+            // 交换所有权，使DescriptorSet::Implementation现在"拥有"对此DescriptorPool的引用
             dsi->_descriptorPool = this;
             _recyclingList.erase(itr);
             --_availableDescriptorSet;
@@ -78,12 +90,14 @@ ref_ptr<DescriptorSet::Implementation> DescriptorPool::allocateDescriptorSet(Des
         }
     }
 
+    // 如果所有可用的描述符集都在回收列表中但没有兼容的，返回空指针
     if (_availableDescriptorSet == _recyclingList.size())
     {
         vsg::debug("The only available vkDescriptorSets associated with DescriptorPool are in the recyclingList, but none are compatible.");
         return {};
     }
 
+    // 检查是否有足够的描述符资源
     DescriptorPoolSizes requiredDescriptorPoolSizes;
     descriptorSetLayout->getDescriptorPoolSizes(requiredDescriptorPoolSizes);
 
@@ -106,6 +120,7 @@ ref_ptr<DescriptorSet::Implementation> DescriptorPool::allocateDescriptorSet(Des
             return {};
     }
 
+    // 分配新的描述符集
     _availableDescriptorPoolSizes.swap(newDescriptorPoolSizes);
     --_availableDescriptorSet;
 
@@ -114,11 +129,14 @@ ref_ptr<DescriptorSet::Implementation> DescriptorPool::allocateDescriptorSet(Des
     return dsi;
 }
 
+// 释放描述符集
+// dsi: 描述符集实现对象
+// 将描述符集返回到回收列表，以便重用
 void DescriptorPool::freeDescriptorSet(ref_ptr<DescriptorSet::Implementation> dsi)
 {
     {
-        // swap ownership so that DescriptorSet::Implementation' reference is reset to null and while this DescriptorPool takes a reference to it.
-        // acquire lock within local scope so that subsequent dsi->_descriptorPool = {} call doesn't unref and (possibly) delete this DescriptorPool while lock still held.
+        // 交换所有权，使DescriptorSet::Implementation的引用重置为空，而此DescriptorPool获取对它的引用
+        // 在局部作用域内获取锁，以便后续的dsi->_descriptorPool = {}调用不会在锁仍持有的情况下取消引用并（可能）删除此DescriptorPool
         std::scoped_lock<std::mutex> lock(mutex);
         _recyclingList.push_back(dsi);
         ++_availableDescriptorSet;

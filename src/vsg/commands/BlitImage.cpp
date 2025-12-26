@@ -15,10 +15,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建图像块传输命令（默认）
+// 图像块传输命令用于在不同格式或大小的图像之间进行缩放和过滤传输
 BlitImage::BlitImage()
 {
 }
 
+// 记录图像块传输命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 执行vkCmdBlitImage命令，从源图像块传输到目标图像，支持缩放和过滤
 void BlitImage::record(CommandBuffer& commandBuffer) const
 {
     vkCmdBlitImage(

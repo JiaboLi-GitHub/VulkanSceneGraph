@@ -16,17 +16,22 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 记录复制图像视图到窗口命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 将源图像视图复制到交换链图像，包括图像布局转换和图像复制操作
+// TODO: 用命令列表替换此实现，而不是当前创建命令、记录命令、删除命令的方式
 void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
 {
-    // TODO: replace this implementation with a list of commands rather than present create commands, record commands, delete commands
+    // TODO: 用命令列表替换此实现，而不是当前创建命令、记录命令、删除命令的方式
 
-    // do nothing if the nextImageIndex() is invalid.
+    // 如果图像索引无效，则不执行任何操作
     size_t imageIndex = window->imageIndex();
     if (imageIndex >= window->numFrames()) return;
 
     auto imageView = window->imageView(imageIndex);
 
-    //  transition image layouts for copy
+    // 转换图像布局以便复制
+    // 将交换链图像转换为传输目标布局
     auto imb_transitionSwapChainToWriteDest = ImageMemoryBarrier::create(
         0, VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -34,6 +39,7 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
         imageView->image,
         VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1});
 
+    // 将存储图像转换为传输源布局
     auto imb_transitionStorageImageToReadSrc = vsg::ImageMemoryBarrier::create(
         0, VK_ACCESS_TRANSFER_READ_BIT,
         VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -41,6 +47,7 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
         srcImageView->image,
         VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1});
 
+    // 执行布局转换屏障
     auto pb_transitionStorageImageToReadSrc = PipelineBarrier::create(
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         0,
@@ -51,7 +58,7 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
 
     auto extent2D = window->extent2D();
 
-    // copy image
+    // 复制图像
     VkImageCopy copyRegion{};
     copyRegion.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     copyRegion.srcOffset = {0, 0, 0};
@@ -68,7 +75,8 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
 
     copyImage->record(commandBuffer);
 
-    // transition image layouts back
+    // 转换图像布局回原始状态
+    // 将交换链图像转换回呈现源布局
     auto imb_transitionSwapChainToOriginal = ImageMemoryBarrier::create(
         VK_ACCESS_TRANSFER_WRITE_BIT, 0,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -76,6 +84,7 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
         imageView->image,
         VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1});
 
+    // 将存储图像转换回通用布局
     auto imb_transitionStorageImageToOriginal = ImageMemoryBarrier::create(
         VK_ACCESS_TRANSFER_READ_BIT, 0,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
@@ -83,6 +92,7 @@ void CopyImageViewToWindow::record(CommandBuffer& commandBuffer) const
         srcImageView->image,
         VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1});
 
+    // 执行布局转换屏障
     auto pb_transitionStorageImageToOriginal = PipelineBarrier::create(
         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
         0,

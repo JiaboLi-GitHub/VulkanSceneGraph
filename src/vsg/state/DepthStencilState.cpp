@@ -16,10 +16,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建深度模板状态对象（默认）
+// 深度模板状态用于定义深度测试、深度写入、深度边界测试和模板测试的参数
 DepthStencilState::DepthStencilState()
 {
 }
 
+// 拷贝构造函数：从另一个深度模板状态对象创建新的深度模板状态对象
+// dss: 要拷贝的深度模板状态对象
+// 拷贝所有深度模板参数（深度测试、深度写入、深度比较操作、深度边界测试、模板测试、正面/背面模板状态、深度边界范围等）
 DepthStencilState::DepthStencilState(const DepthStencilState& dss) :
     Inherit(dss),
     depthTestEnable(dss.depthTestEnable),
@@ -34,10 +39,15 @@ DepthStencilState::DepthStencilState(const DepthStencilState& dss) :
 {
 }
 
+// 析构函数：销毁深度模板状态对象
 DepthStencilState::~DepthStencilState()
 {
 }
 
+// 比较两个深度模板状态对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较深度模板参数区域（从depthTestEnable到maxDepthBounds）
 int DepthStencilState::compare(const Object& rhs_object) const
 {
     int result = GraphicsPipelineState::compare(rhs_object);
@@ -107,6 +117,10 @@ void DepthStencilState::write(Output& output) const
     output.write("maxDepthBounds", maxDepthBounds);
 }
 
+// 应用深度模板状态到图形管线创建信息
+// context: 编译上下文对象
+// pipelineInfo: 图形管线创建信息（输出参数）
+// 从临时内存分配深度模板状态创建信息，填充所有深度模板参数，然后设置到管线创建信息中
 void DepthStencilState::apply(Context& context, VkGraphicsPipelineCreateInfo& pipelineInfo) const
 {
     auto depthStencilState = context.scratchMemory->allocate<VkPipelineDepthStencilStateCreateInfo>();

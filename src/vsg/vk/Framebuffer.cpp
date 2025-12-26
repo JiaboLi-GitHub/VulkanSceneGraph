@@ -15,6 +15,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：创建帧缓冲区对象
+// renderPass: 渲染通道对象
+// attachments: 附件图像视图列表
+// width: 帧缓冲区宽度
+// height: 帧缓冲区高度
+// layers: 帧缓冲区层数
+// 帧缓冲区定义渲染通道使用的所有附件（颜色、深度、模板等）
 Framebuffer::Framebuffer(ref_ptr<RenderPass> renderPass, const ImageViews& attachments, uint32_t width, uint32_t height, uint32_t layers) :
     _device(renderPass->device),
     _renderPass(renderPass),
@@ -25,12 +32,14 @@ Framebuffer::Framebuffer(ref_ptr<RenderPass> renderPass, const ImageViews& attac
 {
     auto deviceID = _device->deviceID;
 
+    // 收集所有附件的Vulkan图像视图句柄
     std::vector<VkImageView> vk_attachments;
     for (auto& attachment : attachments)
     {
         vk_attachments.push_back(attachment->vk(deviceID));
     }
 
+    // 创建帧缓冲区
     VkFramebufferCreateInfo framebufferInfo = {};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferInfo.flags = 0;
@@ -47,6 +56,8 @@ Framebuffer::Framebuffer(ref_ptr<RenderPass> renderPass, const ImageViews& attac
     }
 }
 
+// 析构函数：销毁帧缓冲区对象
+// 销毁Vulkan帧缓冲区
 Framebuffer::~Framebuffer()
 {
     if (_framebuffer)

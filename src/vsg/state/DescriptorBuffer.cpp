@@ -22,17 +22,29 @@ using namespace vsg;
 //
 // DescriptorBuffer
 //
+// 构造函数：创建描述符缓冲区对象（默认）
+// 描述符缓冲区用于将缓冲区绑定到描述符集（统一缓冲区、存储缓冲区等）
+// 默认类型为统一缓冲区
 DescriptorBuffer::DescriptorBuffer() :
     Inherit(0, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
 {
 }
 
+// 拷贝构造函数：从另一个描述符缓冲区对象创建新的描述符缓冲区对象
+// rhs: 要拷贝的描述符缓冲区对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝缓冲区信息列表
 DescriptorBuffer::DescriptorBuffer(const DescriptorBuffer& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     bufferInfoList(copyop(rhs.bufferInfoList))
 {
 }
 
+// 构造函数：使用数据对象创建描述符缓冲区对象
+// data: 数据对象（将被转换为BufferInfo）
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型（统一缓冲区、存储缓冲区等）
 DescriptorBuffer::DescriptorBuffer(ref_ptr<Data> data, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType)
 {
@@ -42,6 +54,12 @@ DescriptorBuffer::DescriptorBuffer(ref_ptr<Data> data, uint32_t in_dstBinding, u
     }
 }
 
+// 构造函数：使用数据列表创建描述符缓冲区对象
+// dataList: 数据对象列表
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型
+// 为每个数据对象创建BufferInfo
 DescriptorBuffer::DescriptorBuffer(const DataList& dataList, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType)
 {
@@ -52,12 +70,18 @@ DescriptorBuffer::DescriptorBuffer(const DataList& dataList, uint32_t in_dstBind
     }
 }
 
+// 构造函数：使用缓冲区信息列表创建描述符缓冲区对象
+// in_bufferInfoList: 缓冲区信息列表
+// in_dstBinding: 目标绑定点索引
+// in_dstArrayElement: 目标数组元素索引
+// in_descriptorType: 描述符类型
 DescriptorBuffer::DescriptorBuffer(const BufferInfoList& in_bufferInfoList, uint32_t in_dstBinding, uint32_t in_dstArrayElement, VkDescriptorType in_descriptorType) :
     Inherit(in_dstBinding, in_dstArrayElement, in_descriptorType),
     bufferInfoList(in_bufferInfoList)
 {
 }
 
+// 析构函数：销毁描述符缓冲区对象
 DescriptorBuffer::~DescriptorBuffer()
 {
 }
@@ -100,12 +124,16 @@ void DescriptorBuffer::write(Output& output) const
     }
 }
 
+// 编译描述符缓冲区
+// context: 编译上下文对象
+// 根据描述符类型确定缓冲区使用标志，如果需要则分配缓冲区，编译缓冲区并绑定内存，然后复制数据或分配给传输任务
 void DescriptorBuffer::compile(Context& context)
 {
     if (bufferInfoList.empty()) return;
 
     auto transferTask = context.transferTask.get();
 
+    // 根据描述符类型确定缓冲区使用标志
     VkBufferUsageFlags bufferUsageFlags = 0;
     switch (descriptorType)
     {
@@ -121,6 +149,7 @@ void DescriptorBuffer::compile(Context& context)
         break;
     }
 
+    // 检查是否需要分配缓冲区
     bool requiresAssignmentOfBuffers = false;
     for (const auto& bufferInfo : bufferInfoList)
     {
@@ -129,8 +158,10 @@ void DescriptorBuffer::compile(Context& context)
 
     auto deviceID = context.deviceID;
 
+    // 如果需要，分配缓冲区并预留槽位
     if (requiresAssignmentOfBuffers)
     {
+        // 根据缓冲区类型确定对齐要求
         VkDeviceSize alignment = 4;
         const auto& limits = context.device->getPhysicalDevice()->getProperties().limits;
         if (bufferUsageFlags == VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
@@ -140,7 +171,7 @@ void DescriptorBuffer::compile(Context& context)
 
         VkDeviceSize totalSize = 0;
 
-        // compute the total size of BufferInfo that needs to be allocated.
+        // 计算需要分配的BufferInfo的总大小
         {
             VkDeviceSize offset = 0;
             for (const auto& bufferInfo : bufferInfoList)
@@ -149,12 +180,13 @@ void DescriptorBuffer::compile(Context& context)
                 {
                     totalSize = offset + bufferInfo->data->dataSize();
                     offset = (alignment == 1 || (totalSize % alignment) == 0) ? totalSize : ((totalSize / alignment) + 1) * alignment;
+                    // 如果数据是动态的或使用传输任务，添加传输目标使用标志
                     if (bufferInfo->data->dynamic() || transferTask) bufferUsageFlags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
                 }
             }
         }
 
-        // if required allocate the buffer and reserve slots in it for the BufferInfo
+        // 如果需要，分配缓冲区并在其中为BufferInfo预留槽位
         if (totalSize > 0)
         {
             auto buffer = vsg::Buffer::create(totalSize, bufferUsageFlags, VK_SHARING_MODE_EXCLUSIVE);
@@ -178,12 +210,15 @@ void DescriptorBuffer::compile(Context& context)
         }
     }
 
+    // 编译所有缓冲区并绑定内存
     for (auto& bufferInfo : bufferInfoList)
     {
         if (bufferInfo->buffer)
         {
+            // 编译缓冲区
             if (bufferInfo->buffer->compile(context.device))
             {
+                // 如果缓冲区未绑定内存，从设备内存缓冲区池分配内存
                 if (bufferInfo->buffer->getDeviceMemory(deviceID) == nullptr)
                 {
                     auto memRequirements = bufferInfo->buffer->getMemoryRequirements(deviceID);
@@ -200,6 +235,7 @@ void DescriptorBuffer::compile(Context& context)
                 }
             }
 
+            // 如果没有传输任务且数据已修改，直接复制数据到缓冲区
             if (!transferTask && bufferInfo->data && bufferInfo->data->getModifiedCount(bufferInfo->copiedModifiedCounts[deviceID]))
             {
                 bufferInfo->copyDataToBuffer(context.deviceID);
@@ -207,18 +243,24 @@ void DescriptorBuffer::compile(Context& context)
         }
     }
 
+    // 如果有传输任务，将缓冲区信息列表分配给传输任务
     if (transferTask) transferTask->assign(bufferInfoList);
 }
 
+// 将描述符缓冲区信息分配到Vulkan写入描述符集结构
+// context: 编译上下文对象
+// wds: 输出参数，用于填充Vulkan写入描述符集结构
+// 从临时内存分配缓冲区信息数组，填充所有缓冲区信息（缓冲区句柄、偏移量、范围）
 void DescriptorBuffer::assignTo(Context& context, VkWriteDescriptorSet& wds) const
 {
     Descriptor::assignTo(context, wds);
 
+    // 从临时内存分配缓冲区信息数组
     auto pBufferInfo = context.scratchMemory->allocate<VkDescriptorBufferInfo>(bufferInfoList.size());
     wds.descriptorCount = static_cast<uint32_t>(bufferInfoList.size());
     wds.pBufferInfo = pBufferInfo;
 
-    // convert from VSG to Vk
+    // 从VSG转换为Vulkan格式
     for (size_t i = 0; i < bufferInfoList.size(); ++i)
     {
         auto& data = bufferInfoList[i];
@@ -229,11 +271,15 @@ void DescriptorBuffer::assignTo(Context& context, VkWriteDescriptorSet& wds) con
     }
 }
 
+// 获取描述符数量
+// 返回: 描述符数量（缓冲区信息列表的大小）
 uint32_t DescriptorBuffer::getNumDescriptors() const
 {
     return static_cast<uint32_t>(bufferInfoList.size());
 }
 
+// 将数据列表复制到缓冲区（所有设备）
+// 为所有设备复制所有缓冲区信息的数据到缓冲区
 void DescriptorBuffer::copyDataListToBuffers()
 {
     for (auto& bufferInfo : bufferInfoList)

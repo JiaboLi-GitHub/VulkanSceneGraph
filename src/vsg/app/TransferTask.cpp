@@ -20,15 +20,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// TransferTask类的构造函数
+// 创建传输任务，用于管理CPU到GPU的数据传输
+// in_device: Vulkan设备对象
+// numBuffers: 缓冲区数量（用于多缓冲）
 TransferTask::TransferTask(Device* in_device, uint32_t numBuffers) :
-    device(in_device),
-    _bufferCount(numBuffers)
+    device(in_device),  // Vulkan设备
+    _bufferCount(numBuffers)  // 缓冲区数量
 {
     CPU_INSTRUMENTATION_L1(instrumentation);
 
+    // 设置数据复制块的名称
     _earlyDataToCopy.name = "_earlyDataToCopy";
     _lateDataToCopy.name = "_lateDataToCopy";
 
+    // 为每个缓冲区创建传输块
     for (uint32_t i = 0; i < numBuffers; ++i)
     {
         _earlyDataToCopy.frames.emplace_back(TransferBlock::create());
@@ -38,6 +44,10 @@ TransferTask::TransferTask(Device* in_device, uint32_t numBuffers) :
     // level = Logger::LOGGER_INFO;
 }
 
+// 检查是否包含需要传输的数据
+// 检查指定传输掩码的数据复制块是否包含需要传输的数据
+// transferMask: 传输掩码
+// 返回值：true表示包含需要传输的数据，false表示不包含
 bool TransferTask::containsDataToTransfer(TransferMask transferMask) const
 {
     std::scoped_lock<std::mutex> lock(_mutex);
@@ -45,20 +55,30 @@ bool TransferTask::containsDataToTransfer(TransferMask transferMask) const
            (((transferMask & TRANSFER_AFTER_RECORD_TRAVERSAL) != 0) && _lateDataToCopy.containsDataToTransfer());
 }
 
+// 分配传输完成信号量
+// 为指定传输掩码的数据复制块分配传输完成信号量
+// transferMask: 传输掩码
+// semaphore: 信号量对象
 void TransferTask::assignTransferConsumedCompletedSemaphore(TransferMask transferMask, ref_ptr<Semaphore> semaphore)
 {
     if ((transferMask & TRANSFER_BEFORE_RECORD_TRAVERSAL) != 0) _earlyDataToCopy.transferConsumerCompletedSemaphore = semaphore;
     if ((transferMask & TRANSFER_AFTER_RECORD_TRAVERSAL) != 0) _lateDataToCopy.transferConsumerCompletedSemaphore = semaphore;
 }
 
+// 分配动态数据
+// 将动态数据（缓冲区和图像）分配给传输任务
+// dynamicData: 动态数据对象
 void TransferTask::assign(const ResourceRequirements::DynamicData& dynamicData)
 {
     CPU_INSTRUMENTATION_L2(instrumentation);
 
-    assign(dynamicData.bufferInfos);
-    assign(dynamicData.imageInfos);
+    assign(dynamicData.bufferInfos);  // 分配缓冲区信息
+    assign(dynamicData.imageInfos);  // 分配图像信息
 }
 
+// 分配缓冲区信息列表
+// 将缓冲区信息添加到相应的数据复制块中
+// bufferInfoList: 缓冲区信息列表
 void TransferTask::assign(const BufferInfoList& bufferInfoList)
 {
     CPU_INSTRUMENTATION_L2(instrumentation);
@@ -71,7 +91,9 @@ void TransferTask::assign(const BufferInfoList& bufferInfoList)
     {
         if (bufferInfo->buffer && bufferInfo->data)
         {
+            // 根据数据变化类型选择早期或晚期数据复制块
             DataToCopy& dataToCopy = (bufferInfo->data->properties.dataVariance >= DYNAMIC_DATA_TRANSFER_AFTER_RECORD) ? _lateDataToCopy : _earlyDataToCopy;
+            // 添加到数据映射中（按缓冲区和偏移量索引）
             dataToCopy.dataMap[bufferInfo->buffer][bufferInfo->offset] = bufferInfo;
         }
         else
@@ -81,21 +103,29 @@ void TransferTask::assign(const BufferInfoList& bufferInfoList)
     }
 }
 
+// 检查是否需要复制
+// 检查数据复制块中是否有需要复制到指定设备的数据
+// deviceID: 设备ID
+// 返回值：true表示需要复制，false表示不需要
 bool TransferTask::DataToCopy::requiresCopy(uint32_t deviceID) const
 {
+    // 检查缓冲区信息
     for (auto buffer_itr = dataMap.begin(); buffer_itr != dataMap.end(); ++buffer_itr)
     {
         auto& bufferInfos = buffer_itr->second;
         for (auto bufferInfo_itr = bufferInfos.begin(); bufferInfo_itr != bufferInfos.end(); ++bufferInfo_itr)
         {
             auto& bufferInfo = bufferInfo_itr->second;
+            // 如果有多个引用且需要复制，返回true
             if ((bufferInfo->referenceCount() > 1) && bufferInfo->requiresCopy(deviceID)) return true;
         }
     }
 
+    // 检查图像信息
     for (auto imageInfo_itr = imageInfoSet.begin(); imageInfo_itr != imageInfoSet.end(); ++imageInfo_itr)
     {
         auto& imageInfo = *imageInfo_itr;
+        // 如果有多个引用且需要复制，返回true
         if ((imageInfo->referenceCount() > 1) && imageInfo->requiresCopy(deviceID)) return true;
     }
 
@@ -337,16 +367,25 @@ void TransferTask::_transferImageInfo(VkCommandBuffer vk_commandBuffer, Transfer
     transferImageData(imageInfo.imageView, imageInfo.imageLayout, properties, width, height, depth, mipLevels, imageStagingBuffer, source_offset, vk_commandBuffer, device);
 }
 
+// 传输数据
+// 根据传输掩码传输数据到GPU
+// transferMask: 传输掩码（指定传输时机）
+// 返回值：传输结果（包含Vulkan结果和信号量）
 TransferTask::TransferResult TransferTask::transferData(TransferMask transferMask)
 {
     log(level, "TransferTask::transferData(", transferMask, ")");
 
     TransferTask::TransferResult result;
+    // 根据掩码执行相应的数据传输
     if ((transferMask & TRANSFER_BEFORE_RECORD_TRAVERSAL) != 0) result = _transferData(_earlyDataToCopy);
     if ((transferMask & TRANSFER_AFTER_RECORD_TRAVERSAL) != 0) result = _transferData(_lateDataToCopy);
     return result;
 }
 
+// 执行数据传输（内部方法）
+// 将数据从CPU内存复制到GPU内存
+// dataToCopy: 要复制的数据块
+// 返回值：传输结果（包含Vulkan结果和信号量）
 TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
 {
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "transferData", COLOR_RECORD);
@@ -357,38 +396,42 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
 
     uint32_t deviceID = device->deviceID;
 
-    // check to see if any copies are require.
+    // 检查是否需要复制
     if (!dataToCopy.requiresCopy(deviceID))
     {
         return TransferResult{VK_SUCCESS, {}};
     }
 
     //
-    // begin compute total data size
+    // 开始计算总数据大小
     //
     VkDeviceSize offset = 0;
-    VkDeviceSize alignment = 4;
+    VkDeviceSize alignment = 4;  // 对齐大小
 
+    // 计算图像数据的总大小
     for (const auto& imageInfo : dataToCopy.imageInfoSet)
     {
         auto data = imageInfo->imageView->image->data;
 
-        // adjust offset to make sure it fits with the stride();
+        // 调整偏移量以确保与步长对齐
         VkDeviceSize image_alignment = std::max(static_cast<VkDeviceSize>(data->stride()), alignment);
         offset = ((offset % image_alignment) == 0) ? offset : ((offset / image_alignment) + 1) * image_alignment;
 
+        // 计算图像大小
         VkFormat targetFormat = imageInfo->imageView->format;
         auto targetTraits = getFormatTraits(targetFormat);
         VkDeviceSize imageSize = (targetTraits.size > 0) ? targetTraits.size * data->valueCount() : data->dataSize();
         log(level, "      ", data, ", data->dataSize() = ", data->dataSize(), ", imageSize = ", imageSize, " targetTraits.size = ", targetTraits.size, ", ", data->valueCount(), ", targetFormat = ", targetFormat);
 
+        // 对齐到下一个边界
         VkDeviceSize endOfEntry = offset + imageSize;
         offset = (/*alignment == 1 ||*/ (endOfEntry % alignment) == 0) ? endOfEntry : ((endOfEntry / alignment) + 1) * alignment;
     }
-    dataToCopy.imageTotalSize = offset;
+    dataToCopy.imageTotalSize = offset;  // 图像总大小
 
     log(level, "    dataToCopy.imageTotalSize = ", dataToCopy.imageTotalSize);
 
+    // 计算缓冲区数据的总大小和区域数量
     offset = 0;
     dataToCopy.dataTotalRegions = 0;
     for (const auto& entry : dataToCopy.dataMap)
@@ -397,31 +440,34 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
         for (const auto& offset_bufferInfo : bufferInfos)
         {
             const auto& bufferInfo = offset_bufferInfo.second;
+            // 对齐到下一个边界
             VkDeviceSize endOfEntry = offset + bufferInfo->range;
             offset = (/*alignment == 1 ||*/ (endOfEntry % alignment) == 0) ? endOfEntry : ((endOfEntry / alignment) + 1) * alignment;
-            ++dataToCopy.dataTotalRegions;
+            ++dataToCopy.dataTotalRegions;  // 增加区域计数
         }
     }
-    dataToCopy.dataTotalSize = offset;
+    dataToCopy.dataTotalSize = offset;  // 缓冲区总大小
     log(level, "    dataToCopy.dataTotalSize = ", dataToCopy.dataTotalSize);
 
     //
-    // end of compute size
+    // 结束计算大小
     //
 
+    // 计算总大小
     VkDeviceSize totalSize = dataToCopy.dataTotalSize + dataToCopy.imageTotalSize;
-    if (totalSize == 0) return TransferResult{VK_SUCCESS, {}};
+    if (totalSize == 0) return TransferResult{VK_SUCCESS, {}};  // 没有数据需要传输
 
     log(level, "    totalSize = ", totalSize);
 
+    // 获取当前帧的传输块
     auto& frame = *(dataToCopy.frames[dataToCopy.frameIndex]);
-    auto& fence = frame.fence;
-    auto& staging = frame.staging;
-    auto& commandBuffer = frame.transferCommandBuffer;
-    auto& newSignalSemaphore = dataToCopy.transferCompleteSemaphore;
+    auto& fence = frame.fence;  // 围栏
+    auto& staging = frame.staging;  // 暂存缓冲区
+    auto& commandBuffer = frame.transferCommandBuffer;  // 传输命令缓冲区
+    auto& newSignalSemaphore = dataToCopy.transferCompleteSemaphore;  // 传输完成信号量
 
-    const auto& copyRegions = frame.copyRegions;
-    auto& buffer_data = frame.buffer_data;
+    const auto& copyRegions = frame.copyRegions;  // 复制区域
+    auto& buffer_data = frame.buffer_data;  // 缓冲区数据指针
 
     log(level, "    frameIndex = ", dataToCopy.frameIndex);
     log(level, "    frame = ", &frame);
@@ -432,17 +478,19 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
     log(level, "    newSignalSemaphore = ", newSignalSemaphore, ", ", newSignalSemaphore ? newSignalSemaphore->vk() : VK_NULL_HANDLE);
     log(level, "    copyRegions.size() = ", copyRegions.size());
 
+    // 如果需要，等待围栏
     if (frame.waitOnFence && fence)
     {
         uint64_t timeout = std::numeric_limits<uint64_t>::max();
         if (VkResult result = fence->wait(timeout); result != VK_SUCCESS) return TransferResult{result, {}};
-        fence->resetFenceAndDependencies();
+        fence->resetFenceAndDependencies();  // 重置围栏和依赖
     }
     frame.waitOnFence = false;
 
-    // advance frameIndex
+    // 推进帧索引（循环）
     dataToCopy.frameIndex = (dataToCopy.frameIndex + 1) % dataToCopy.frames.size();
 
+    // 创建或重置命令缓冲区
     if (!commandBuffer)
     {
         auto cp = CommandPool::create(device, transferQueue->queueFamilyIndex(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
@@ -453,20 +501,23 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
         commandBuffer->reset();
     }
 
+    // 创建传输完成信号量（如果不存在）
     if (!newSignalSemaphore)
     {
-        // signal transfer submission has completed
+        // 发出传输提交已完成的信号
         newSignalSemaphore = Semaphore::create(device, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
         log(level, "    newSignalSemaphore created ", newSignalSemaphore, ", ", newSignalSemaphore->vk());
     }
 
+    // 创建围栏（如果不存在）
     if (!fence) fence = Fence::create(device);
 
     VkResult result = VK_SUCCESS;
 
-    // allocate staging buffer if required
+    // 如果需要，分配暂存缓冲区
     if (!staging || staging->size < totalSize)
     {
+        // 如果总大小小于最小暂存缓冲区大小，使用最小值
         if (totalSize < minimumStagingBufferSize)
         {
             totalSize = minimumStagingBufferSize;
@@ -475,9 +526,11 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
 
         VkDeviceSize previousSize = staging ? staging->size : 0;
 
+        // 创建暂存缓冲区（主机可见和一致的内存）
         VkMemoryPropertyFlags stagingMemoryPropertiesFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         staging = vsg::createBufferAndMemory(device, totalSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, stagingMemoryPropertiesFlags);
 
+        // 映射暂存缓冲区内存
         auto stagingMemory = staging->getDeviceMemory(deviceID);
         buffer_data = nullptr;
         result = stagingMemory->map(staging->getMemoryOffset(deviceID), staging->size, 0, &buffer_data);
@@ -489,9 +542,10 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
 
     log(level, "    totalSize = ", totalSize);
 
+    // 开始记录命令缓冲区
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;  // 一次性提交
     beginInfo.pInheritanceInfo = nullptr;
 
     VkCommandBuffer vk_commandBuffer = *commandBuffer;
@@ -501,21 +555,22 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
     {
         COMMAND_BUFFER_INSTRUMENTATION(instrumentation, *commandBuffer, "transferData", COLOR_GPU)
 
-        // transfer the modified BufferInfo and ImageInfo
+        // 传输修改的BufferInfo和ImageInfo
         _transferImageInfos(dataToCopy, vk_commandBuffer, frame, offset);
         _transferBufferInfos(dataToCopy, vk_commandBuffer, frame, offset);
     }
 
+    // 结束记录命令缓冲区
     vkEndCommandBuffer(vk_commandBuffer);
 
-    // if no regions to copy have been found then commandBuffer will be empty so no need to submit it to queue and signal the associated semaphore
+    // 如果没有找到要复制的区域，命令缓冲区将为空，无需提交到队列并发出关联的信号量
     if (offset > 0)
     {
-        // submit the transfer commands
+        // 提交传输命令
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        // set up vulkan wait semaphore
+        // 设置Vulkan等待信号量
         std::vector<VkSemaphore> vk_waitSemaphores;
         std::vector<VkPipelineStageFlags> vk_waitStages;
         if (dataToCopy.transferConsumerCompletedSemaphore)
@@ -526,7 +581,7 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
             log(level, "TransferTask::_transferData( ", dataToCopy.name, " ) submit dataToCopy.transferConsumerCompletedSemaphore = ", dataToCopy.transferConsumerCompletedSemaphore);
         }
 
-        // set up the vulkan signal semaphore
+        // 设置Vulkan发出信号量
         std::vector<VkSemaphore> vk_signalSemaphores;
 
         vk_signalSemaphores.push_back(*newSignalSemaphore);
@@ -543,11 +598,12 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
         log(level, "   TransferTask submitInfo.waitSemaphoreCount = ", submitInfo.waitSemaphoreCount);
         log(level, "   TransferTask submitInfo.signalSemaphoreCount = ", submitInfo.signalSemaphoreCount);
 
+        // 提交到传输队列
         result = transferQueue->submit(submitInfo, fence);
 
-        frame.waitOnFence = true;
+        frame.waitOnFence = true;  // 标记需要等待围栏
 
-        dataToCopy.transferConsumerCompletedSemaphore.reset();
+        dataToCopy.transferConsumerCompletedSemaphore.reset();  // 重置传输消费者完成信号量
 
         if (result != VK_SUCCESS) return TransferResult{result, {}};
 
@@ -562,8 +618,20 @@ TransferTask::TransferResult TransferTask::_transferData(DataToCopy& dataToCopy)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// vsg::transferImageData(..)
+// vsg::transferImageData(..) - 传输图像数据到GPU
 //
+// 将图像数据从暂存缓冲区传输到GPU图像
+// imageView: 图像视图对象
+// targetImageLayout: 目标图像布局
+// properties: 数据属性
+// width: 图像宽度
+// height: 图像高度
+// depth: 图像深度
+// mipLevels: Mip级别数量
+// stagingBuffer: 暂存缓冲区
+// stagingBufferOffset: 暂存缓冲区偏移量
+// commandBuffer: 命令缓冲区
+// device: Vulkan设备对象
 void vsg::transferImageData(ref_ptr<ImageView> imageView, VkImageLayout targetImageLayout, Data::Properties properties, uint32_t width, uint32_t height, uint32_t depth, uint32_t mipLevels, ref_ptr<Buffer> stagingBuffer, VkDeviceSize stagingBufferOffset, VkCommandBuffer commandBuffer, vsg::Device* device)
 {
     auto image = imageView->image;
@@ -572,14 +640,14 @@ void vsg::transferImageData(ref_ptr<ImageView> imageView, VkImageLayout targetIm
     auto data = image->data;
     if (!data) return;
 
-    auto vk_image = image->vk(device->deviceID);
-    auto aspectMask = imageView->subresourceRange.aspectMask;
+    auto vk_image = image->vk(device->deviceID);  // 获取Vulkan图像句柄
+    auto aspectMask = imageView->subresourceRange.aspectMask;  // 获取方面掩码
 
-    // Stage which the associated image will be used, such as set by DescriptorSetLayoutBinding::stageFlags
-    // Further info:
+    // 关联图像将使用的阶段，例如由DescriptorSetLayoutBinding::stageFlags设置
+    // 更多信息：
     //     https://docs.vulkan.org/refpages/latest/refpages/source/VkPipelineStageFlags.html
     //     https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/VkDescriptorSetLayoutBinding.html
-    VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;  // 片段着色器阶段
 
     uint32_t faceWidth = width;
     uint32_t faceHeight = height;

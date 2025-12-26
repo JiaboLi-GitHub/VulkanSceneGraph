@@ -37,20 +37,33 @@ namespace
         {".hlsl", VK_SHADER_STAGE_ALL}};
 } // namespace
 
+// 构造函数：创建GLSL读取器/写入器对象
+// GLSL是OpenGL着色语言，VSG支持多种着色器阶段的GLSL文件
 glsl::glsl()
 {
 }
 
+// 检查扩展名是否支持
+// ext: 文件扩展名
+// 返回: 如果扩展名支持则返回true
+// 检查扩展名是否在支持的着色器阶段映射中
 bool glsl::extensionSupported(const Path& ext)
 {
     return s_extensionToStage.find(ext) != s_extensionToStage.end();
 }
 
+// 创建着色器对象
+// found_filename: 找到的文件名路径
+// source: 着色器源代码
+// stageFlagBits: 着色器阶段标志位
+// options: 选项对象
+// 返回: 着色器模块或着色器阶段对象
+// 处理#include指令，创建着色器模块，如果指定了着色器阶段则创建着色器阶段对象
 ref_ptr<Object> glsl::createShader(const Path& found_filename, std::string& source, VkShaderStageFlagBits stageFlagBits, ref_ptr<const Options> options) const
 {
     CPU_INSTRUMENTATION_L2_NC(options ? options->instrumentation.get() : nullptr, "glsl createShader", COLOR_READ);
 
-    // handle any #includes in the source
+    // 处理源代码中的任何#include指令
     if (source.find("include") != std::string::npos)
     {
         source = insertIncludes(source, prependPathToOptionsIfRequired(found_filename, options));
@@ -58,6 +71,7 @@ ref_ptr<Object> glsl::createShader(const Path& found_filename, std::string& sour
 
     auto sm = ShaderModule::create(source);
 
+    // 如果指定了着色器阶段，创建着色器阶段对象
     if (stageFlagBits != VK_SHADER_STAGE_ALL)
     {
         return ShaderStage::create(stageFlagBits, "main", sm);

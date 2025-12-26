@@ -18,12 +18,20 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 using namespace vsg;
 
+// 构造函数：使用输入流、对象工厂和选项创建二进制输入对象
+// input: 输入流对象
+// in_objectFactory: 对象工厂对象（用于创建反序列化的对象）
+// in_options: 选项对象
+// 二进制输入用于从二进制格式的输入流读取VSG对象的序列化数据
 BinaryInput::BinaryInput(std::istream& input, ref_ptr<ObjectFactory> in_objectFactory, ref_ptr<const Options> in_options) :
     Input(in_objectFactory, in_options),
     _input(input)
 {
 }
 
+// 读取字符串（内部方法）
+// value: 输出参数，用于存储读取的字符串
+// 先读取字符串长度（uint32_t），然后读取字符串内容
 void BinaryInput::_read(std::string& value)
 {
     uint32_t size = readValue<uint32_t>(nullptr);
@@ -32,6 +40,9 @@ void BinaryInput::_read(std::string& value)
     _input.read(value.data(), size);
 }
 
+// 读取宽字符串（内部方法）
+// value: 输出参数，用于存储读取的宽字符串
+// 先读取UTF-8字符串，然后转换为宽字符串
 void BinaryInput::_read(std::wstring& value)
 {
     std::string string_value;
@@ -39,6 +50,10 @@ void BinaryInput::_read(std::wstring& value)
     convert_utf(string_value, value);
 }
 
+// 读取字符串数组
+// num: 要读取的字符串数量
+// value: 字符串数组指针
+// 读取指定数量的字符串
 void BinaryInput::read(size_t num, std::string* value)
 {
     if (num == 1)
@@ -54,6 +69,10 @@ void BinaryInput::read(size_t num, std::string* value)
     }
 }
 
+// 读取宽字符串数组
+// num: 要读取的宽字符串数量
+// value: 宽字符串数组指针
+// 读取指定数量的宽字符串
 void BinaryInput::read(size_t num, std::wstring* value)
 {
     if (num == 1)
@@ -69,6 +88,10 @@ void BinaryInput::read(size_t num, std::wstring* value)
     }
 }
 
+// 读取路径数组
+// num: 要读取的路径数量
+// value: 路径数组指针
+// 读取指定数量的路径（先读取字符串，然后转换为路径）
 void BinaryInput::read(size_t num, Path* value)
 {
     if (num == 1)
@@ -181,16 +204,21 @@ void BinaryInput::read(size_t num, long double* value)
     }
 }
 
+// 读取对象
+// 返回: 读取的对象，如果失败则返回空指针
+// 从二进制输入流读取对象，支持对象ID引用和递归读取
 vsg::ref_ptr<vsg::Object> BinaryInput::read()
 {
     ObjectID id = objectID();
 
+    // 如果对象ID已存在，返回已读取的对象（处理引用）
     if (auto itr = objectIDMap.find(id); itr != objectIDMap.end())
     {
         return itr->second;
     }
     else
     {
+        // 读取类名并创建新对象
         std::string className = readValue<std::string>(nullptr);
         if (className != "nullptr")
         {
@@ -198,6 +226,7 @@ vsg::ref_ptr<vsg::Object> BinaryInput::read()
             objectIDMap[id] = object;
             if (object)
             {
+                // 递归读取对象内容
                 object->read(*this);
             }
             else

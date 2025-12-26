@@ -22,10 +22,16 @@ using namespace vsg;
 //
 // ShaderCompileSettings
 //
+// 构造函数：创建着色器编译设置对象（默认）
+// 着色器编译设置用于配置着色器编译器的参数（Vulkan版本、语言、目标、优化等）
 ShaderCompileSettings::ShaderCompileSettings()
 {
 }
 
+// 拷贝构造函数：从另一个着色器编译设置对象创建新的着色器编译设置对象
+// rhs: 要拷贝的着色器编译设置对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝所有编译设置参数
 ShaderCompileSettings::ShaderCompileSettings(const ShaderCompileSettings& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     vulkanVersion(rhs.vulkanVersion),
@@ -40,6 +46,10 @@ ShaderCompileSettings::ShaderCompileSettings(const ShaderCompileSettings& rhs, c
 {
 }
 
+// 比较两个着色器编译设置对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类和所有编译设置参数
 int ShaderCompileSettings::compare(const Object& rhs_object) const
 {
     int result = Object::compare(rhs_object);
@@ -106,10 +116,16 @@ void ShaderCompileSettings::write(Output& output) const
 //
 // Shader
 //
+// 构造函数：创建着色器模块对象（默认）
+// 着色器模块用于存储着色器源代码和/或SPIR-V字节码
 ShaderModule::ShaderModule()
 {
 }
 
+// 拷贝构造函数：从另一个着色器模块对象创建新的着色器模块对象
+// rhs: 要拷贝的着色器模块对象
+// copyop: 拷贝操作参数，用于控制深度拷贝行为
+// 拷贝源代码、编译设置和SPIR-V代码
 ShaderModule::ShaderModule(const ShaderModule& rhs, const CopyOp& copyop) :
     Inherit(rhs, copyop),
     source(rhs.source),
@@ -119,23 +135,32 @@ ShaderModule::ShaderModule(const ShaderModule& rhs, const CopyOp& copyop) :
     vsg::info("ShaderModule::ShaderModule(", &rhs, ", copyop) ");
 }
 
+// 构造函数：使用源代码和编译设置创建着色器模块对象
+// in_source: 着色器源代码（GLSL等，将在编译时转换为SPIR-V）
+// in_hints: 着色器编译设置（可选）
 ShaderModule::ShaderModule(const std::string& in_source, ref_ptr<ShaderCompileSettings> in_hints) :
     source(in_source),
     hints(in_hints)
 {
 }
 
+// 构造函数：使用SPIR-V代码创建着色器模块对象
+// in_code: SPIR-V字节码（已编译的代码）
 ShaderModule::ShaderModule(const SPIRV& in_code) :
     code(in_code)
 {
 }
 
+// 构造函数：使用源代码和SPIR-V代码创建着色器模块对象
+// in_source: 着色器源代码（用于调试和重新编译）
+// in_code: SPIR-V字节码（已编译的代码）
 ShaderModule::ShaderModule(const std::string& in_source, const SPIRV& in_code) :
     source(in_source),
     code(in_code)
 {
 }
 
+// 析构函数：销毁着色器模块对象
 ShaderModule::~ShaderModule()
 {
 }
@@ -174,14 +199,22 @@ void ShaderModule::write(Output& output) const
     output.writeEndOfLine();
 }
 
+// 编译着色器模块
+// context: 编译上下文对象
+// 创建Vulkan着色器模块对象（从SPIR-V代码）
 void ShaderModule::compile(Context& context)
 {
     if (!_implementation[context.deviceID]) _implementation[context.deviceID] = Implementation::create(context.device, this);
 }
 
+// 实现类构造函数：创建着色器模块实现对象
+// device: Vulkan设备对象
+// shaderModule: 着色器模块对象
+// 从SPIR-V代码创建Vulkan着色器模块对象
 ShaderModule::Implementation::Implementation(Device* device, ShaderModule* shaderModule) :
     _device(device)
 {
+    // 设置着色器模块创建信息
     VkShaderModuleCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.pNext = nullptr;
@@ -189,12 +222,15 @@ ShaderModule::Implementation::Implementation(Device* device, ShaderModule* shade
     createInfo.codeSize = shaderModule->code.size() * sizeof(ShaderModule::SPIRV::value_type);
     createInfo.pCode = shaderModule->code.data();
 
+    // 创建Vulkan着色器模块
     if (VkResult result = vkCreateShaderModule(*device, &createInfo, _device->getAllocationCallbacks(), &_shaderModule); result != VK_SUCCESS)
     {
         throw Exception{"Error: vsg::ShaderModule::create(...) failed to create shader module.", result};
     }
 }
 
+// 实现类析构函数：销毁着色器模块实现对象
+// 释放Vulkan着色器模块对象
 ShaderModule::Implementation::~Implementation()
 {
     vkDestroyShaderModule(*_device, _shaderModule, _device->getAllocationCallbacks());

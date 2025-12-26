@@ -33,18 +33,25 @@ using namespace vsg;
 
 //////////////////////////////////////
 //
-// TraverseChildrenOfNode
+// TraverseChildrenOfNode - 遍历节点子节点的辅助节点类
 //
 namespace vsg
 {
+    // 辅助节点类：用于遍历指定节点的子节点
+    // 用于阴影贴图渲染，允许从视图节点遍历场景图
     class TraverseChildrenOfNode : public Inherit<Node, TraverseChildrenOfNode>
     {
     public:
+        // 构造函数：创建遍历节点子节点的辅助节点
+        // in_node: 要遍历其子节点的节点
         explicit TraverseChildrenOfNode(Node* in_node) :
             node(in_node) {}
 
         observer_ptr<Node> node;
 
+        // 模板遍历方法：遍历关联节点的子节点
+        // N: 节点类型
+        // V: 访问者类型
         template<class N, class V>
         static void t_traverse(N& in_node, V& visitor)
         {
@@ -57,6 +64,14 @@ namespace vsg
     };
     VSG_type_name(TraverseChildrenOfNode);
 
+    // 计算级联阴影贴图的实用分割距离
+    // n: 近平面距离
+    // f: 远平面距离
+    // i: 当前级联索引
+    // m: 总级联数量
+    // lambda: 混合因子（0=均匀分割，1=对数分割）
+    // 返回: 分割距离
+    // 使用对数分割和均匀分割的混合，提供更好的阴影质量
     inline double Cpractical(double n, double f, double i, double m, double lambda)
     {
         double Clog = n * std::pow((f / n), (i / m));
@@ -68,12 +83,18 @@ namespace vsg
 
 //////////////////////////////////////
 //
-// ViewDescriptorSetLayout
+// ViewDescriptorSetLayout - 视图描述符集布局，从视图相关状态获取描述符集布局
 //
+// 构造函数：创建视图描述符集布局对象（默认）
+// 视图描述符集布局用于延迟获取视图相关状态的描述符集布局
 ViewDescriptorSetLayout::ViewDescriptorSetLayout()
 {
 }
 
+// 比较两个视图描述符集布局对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 首先比较基类，然后比较视图描述符集布局指针
 int ViewDescriptorSetLayout::compare(const Object& rhs_object) const
 {
     int result = DescriptorSetLayout::compare(rhs_object);
@@ -83,16 +104,23 @@ int ViewDescriptorSetLayout::compare(const Object& rhs_object) const
     return compare_pointer(_viewDescriptorSetLayout, rhs._viewDescriptorSetLayout);
 }
 
+// 从输入流读取视图描述符集布局对象
+// input: 输入流对象
 void ViewDescriptorSetLayout::read(Input& input)
 {
     Object::read(input);
 }
 
+// 将视图描述符集布局对象写入输出流
+// output: 输出流对象
 void ViewDescriptorSetLayout::write(Output& output) const
 {
     Object::write(output);
 }
 
+// 编译视图描述符集布局
+// context: 编译上下文对象
+// 从视图相关状态获取描述符集布局并编译它
 void ViewDescriptorSetLayout::compile(Context& context)
 {
     if (!_viewDescriptorSetLayout && context.viewDependentState && context.viewDependentState->descriptorSetLayout)
@@ -104,8 +132,11 @@ void ViewDescriptorSetLayout::compile(Context& context)
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
-// BindViewDescriptorSets
+// BindViewDescriptorSets - 绑定视图描述符集的状态命令
 //
+// 构造函数：创建绑定视图描述符集对象
+// 槽位2：在绑定管线之后执行
+// 用于绑定视图相关状态的描述符集（光源数据、阴影贴图等）
 BindViewDescriptorSets::BindViewDescriptorSets() :
     Inherit(2), // slot 2
     pipelineBindPoint(VK_PIPELINE_BIND_POINT_GRAPHICS),
@@ -113,6 +144,10 @@ BindViewDescriptorSets::BindViewDescriptorSets() :
 {
 }
 
+// 比较两个绑定视图描述符集对象
+// rhs_object: 要比较的对象
+// 返回: 比较结果，0表示相等，负数表示小于，正数表示大于
+// 依次比较基类、管线绑定点、布局和第一个集合索引
 int BindViewDescriptorSets::compare(const Object& rhs_object) const
 {
     int result = StateCommand::compare(rhs_object);
@@ -125,6 +160,9 @@ int BindViewDescriptorSets::compare(const Object& rhs_object) const
     return compare_value(firstSet, rhs.firstSet);
 }
 
+// 从输入流读取绑定视图描述符集对象
+// input: 输入流对象
+// 读取管线绑定点、布局和第一个集合索引
 void BindViewDescriptorSets::read(Input& input)
 {
     StateCommand::read(input);
@@ -134,6 +172,9 @@ void BindViewDescriptorSets::read(Input& input)
     input.read("firstSet", firstSet);
 }
 
+// 将绑定视图描述符集对象写入输出流
+// output: 输出流对象
+// 写入管线绑定点、布局和第一个集合索引
 void BindViewDescriptorSets::write(Output& output) const
 {
     StateCommand::write(output);
@@ -143,12 +184,18 @@ void BindViewDescriptorSets::write(Output& output) const
     output.write("firstSet", firstSet);
 }
 
+// 编译绑定视图描述符集
+// context: 编译上下文对象
+// 编译管线布局和视图相关状态
 void BindViewDescriptorSets::compile(Context& context)
 {
     layout->compile(context);
     if (context.viewDependentState) context.viewDependentState->compile(context);
 }
 
+// 记录绑定视图描述符集命令到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// 绑定视图相关状态的描述符集到管线
 void BindViewDescriptorSets::record(CommandBuffer& commandBuffer) const
 {
     if (commandBuffer.viewDependentState)
@@ -159,18 +206,30 @@ void BindViewDescriptorSets::record(CommandBuffer& commandBuffer) const
 
 //////////////////////////////////////
 //
-// ViewDependentState
+// ViewDependentState - 视图相关状态，管理视图相关的渲染状态（光源、阴影贴图等）
 //
+// 构造函数：使用视图创建视图相关状态对象
+// in_view: 关联的视图对象
+// 视图相关状态用于管理每个视图的特定渲染状态，包括光源数据、阴影贴图、视口数据等
 ViewDependentState::ViewDependentState(View* in_view) :
     view(in_view)
 {
     // info("ViewDependentState::ViewDependentState(view = ", view, ")");
 }
 
+// 析构函数：销毁视图相关状态对象
 ViewDependentState::~ViewDependentState()
 {
 }
 
+// 创建阴影贴图图像
+// width: 图像宽度
+// height: 图像高度
+// levels: 数组层数（用于级联阴影贴图）
+// format: 图像格式（通常为深度格式）
+// usage: 图像使用标志
+// 返回: 阴影贴图图像对象
+// 创建用于存储阴影贴图的2D数组图像
 ref_ptr<Image> createShadowImage(uint32_t width, uint32_t height, uint32_t levels, VkFormat format, VkImageUsageFlags usage)
 {
     auto image = Image::create();
@@ -189,16 +248,20 @@ ref_ptr<Image> createShadowImage(uint32_t width, uint32_t height, uint32_t level
     return image;
 }
 
+// 获取光源的活动阴影设置
+// light: 光源对象
+// 返回: 阴影设置对象
+// 首先查找精确匹配的阴影设置覆盖，如果没有则查找空键的覆盖（用于所有未匹配的光源），最后返回光源的默认阴影设置
 ref_ptr<ShadowSettings> ViewDependentState::getActiveShadowSettings(const Light* light) const
 {
-    // find an exact match
+    // 查找精确匹配
     auto itr = shadowSettingsOverride.find(ref_ptr<const Light>(light));
     if (itr != shadowSettingsOverride.end())
     {
         return itr->second;
     }
 
-    // if null entry exists then use it to override all unmatched Lights.
+    // 如果存在空键条目，则使用它来覆盖所有未匹配的光源
     itr = shadowSettingsOverride.find({});
     if (itr != shadowSettingsOverride.end())
     {
@@ -208,19 +271,25 @@ ref_ptr<ShadowSettings> ViewDependentState::getActiveShadowSettings(const Light*
     return light->shadowSettings;
 }
 
+// 初始化视图相关状态
+// requirements: 资源需求对象
+// 初始化光源数据缓冲区、视口数据缓冲区、阴影贴图图像和描述符集
+// 根据视图特征和资源需求确定最大光源数量、阴影贴图数量和大小
 void ViewDependentState::init(ResourceRequirements& requirements)
 {
-    // check if ViewDependentState has already been initialized
+    // 检查视图相关状态是否已经初始化
     if (lightData) return;
 
+    // 如果没有着色器集，使用标准PBR着色器集
     if (!shaderSet)
     {
-        // fallback to using the standard PBR ShaderSet
+        // 回退到使用标准PBR着色器集
         shaderSet = vsg::createPhysicsBasedRenderingShaderSet();
     }
 
     auto descriptorConfigurator = DescriptorConfigurator::create(shaderSet);
 
+    // 默认值
     uint32_t maxNumberLights = 64;
     uint32_t maxViewports = 1;
 
@@ -230,8 +299,10 @@ void ViewDependentState::init(ResourceRequirements& requirements)
 
     const auto& viewDetails = requirements.views[view];
 
+    // 如果视图需要记录光源或阴影贴图
     if ((view->features & (RECORD_LIGHTS | RECORD_SHADOW_MAPS)) != 0)
     {
+        // 计算实际光源数量和阴影贴图数量
         uint32_t numLights = static_cast<uint32_t>(viewDetails.lights.size());
         uint32_t numShadowMaps = 0;
         for (auto& light : viewDetails.lights)
@@ -242,6 +313,7 @@ void ViewDependentState::init(ResourceRequirements& requirements)
             }
         }
 
+        // 根据资源需求范围调整最大光源数量
         if (numLights < requirements.numLightsRange[0])
             maxNumberLights = requirements.numLightsRange[0];
         else if (numLights > requirements.numLightsRange[1])
@@ -249,6 +321,7 @@ void ViewDependentState::init(ResourceRequirements& requirements)
         else
             maxNumberLights = numLights;
 
+        // 根据资源需求范围调整最大阴影贴图数量
         if (numShadowMaps < requirements.numShadowMapsRange[0])
             maxShadowMaps = requirements.numShadowMapsRange[0];
         else if (numShadowMaps > requirements.numShadowMapsRange[1])
@@ -256,6 +329,7 @@ void ViewDependentState::init(ResourceRequirements& requirements)
         else
             maxShadowMaps = numShadowMaps;
 
+        // 从资源需求获取阴影贴图大小
         shadowWidth = requirements.shadowMapSize.x;
         shadowHeight = requirements.shadowMapSize.y;
     }
@@ -265,7 +339,7 @@ void ViewDependentState::init(ResourceRequirements& requirements)
         maxShadowMaps = 0;
     }
 
-    // 1 vec3 is used for specifying the number of lights, lagest lightData entries are for spot light with 4 vec4s per light, and each shadowmap takes 8 vec4s.
+    // 计算光源数据大小：1个vec4用于指定光源数量，最大条目是聚光灯（每个光源4个vec4），每个阴影贴图需要8个vec4
     uint32_t lightDataSize = 1 + maxNumberLights * 4 + maxShadowMaps * 8;
 
 #if 0
@@ -380,26 +454,30 @@ void ViewDependentState::init(ResourceRequirements& requirements)
         }
     }
 
-    // if not active then don't enable shadow maps
+    // 如果不活动则不启用阴影贴图
     if (maxShadowMaps == 0) return;
 
-    // create a switch to toggle on/off the render to texture subgraphs for each shadowmap layer
+    // 创建开关以切换每个阴影贴图层级的渲染到纹理子图
     preRenderSwitch = Switch::create();
 
     preRenderCommandGraph = CommandGraph::create();
-    preRenderCommandGraph->submitOrder = -1;
+    preRenderCommandGraph->submitOrder = -1; // 在主渲染之前执行
     preRenderCommandGraph->addChild(preRenderSwitch);
 
+    // 创建遍历视图子节点的辅助节点
     auto tcon = TraverseChildrenOfNode::create(view);
 
-    Mask shadowMask = 0x1; // TODO: do we inherit from main scene? how?
+    Mask shadowMask = 0x1; // TODO: 我们是否从主场景继承？如何继承？
 
+    // 创建阴影贴图视口状态
     auto viewportState = ViewportState::create(VkExtent2D{shadowWidth, shadowHeight});
 
+    // 为每个阴影贴图创建视图和渲染图
     ref_ptr<View> first_view;
     shadowMaps.resize(maxShadowMaps);
     for (auto& shadowMap : shadowMaps)
     {
+        // 第一个视图使用继承视点特征创建，后续视图从第一个视图复制
         if (first_view)
         {
             shadowMap.view = View::create(*first_view);
@@ -415,12 +493,16 @@ void ViewDependentState::init(ResourceRequirements& requirements)
         shadowMap.view->addChild(tcon);
         shadowMap.view->camera->viewportState = viewportState;
 
+        // 创建阴影贴图渲染图
         shadowMap.renderGraph = RenderGraph::create();
         shadowMap.renderGraph->addChild(shadowMap.view);
         preRenderSwitch->addChild(MASK_ALL, shadowMap.renderGraph);
     }
 }
 
+// 更新视图相关状态
+// requirements: 资源需求对象
+// 更新预渲染命令图的最大槽位
 void ViewDependentState::update(ResourceRequirements& requirements)
 {
     if (preRenderCommandGraph)
@@ -429,6 +511,9 @@ void ViewDependentState::update(ResourceRequirements& requirements)
     }
 }
 
+// 编译视图相关状态
+// context: 编译上下文对象
+// 编译描述符集和阴影贴图渲染资源（渲染通道、帧缓冲区等）
 void ViewDependentState::compile(Context& context)
 {
     if (compiled) return;
@@ -436,8 +521,10 @@ void ViewDependentState::compile(Context& context)
 
     CPU_INSTRUMENTATION_L1_NC(context.instrumentation, "ViewDependentState compile", COLOR_COMPILE);
 
+    // 编译描述符集
     descriptorSet->compile(context);
 
+    // 如果视图需要记录阴影贴图且存在预渲染命令图，编译阴影贴图渲染资源
     if ((view->features & RECORD_SHADOW_MAPS) != 0 && preRenderCommandGraph && !preRenderCommandGraph->device)
     {
         preRenderCommandGraph->device = context.device;
@@ -447,12 +534,14 @@ void ViewDependentState::compile(Context& context)
 
         auto extent = shadowDepthImage->extent;
 
+        // 编译阴影深度图像
         shadowDepthImage->compile(context);
 
+        // 为每个阴影贴图创建渲染通道和帧缓冲区
         uint32_t layer = 0;
         for (const auto& shadowMap : shadowMaps)
         {
-            // create depth buffer
+            // 创建深度缓冲区视图（每个阴影贴图使用数组的一个层）
             auto depthImageView = ImageView::create(shadowDepthImage, VK_IMAGE_ASPECT_DEPTH_BIT);
             depthImageView->viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
             depthImageView->subresourceRange.baseMipLevel = 0;
@@ -461,9 +550,9 @@ void ViewDependentState::compile(Context& context)
             depthImageView->subresourceRange.layerCount = 1;
             depthImageView->compile(context);
 
-            // attachment descriptions
+            // 附件描述
             RenderPass::Attachments attachments(1);
-            // Depth attachment
+            // 深度附件
             attachments[0].format = shadowDepthImage->format;
             attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
             attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -473,6 +562,7 @@ void ViewDependentState::compile(Context& context)
             attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             attachments[0].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 
+            // 子通道描述（仅使用深度附件，无颜色附件）
             AttachmentReference ignoreColorReference = {VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED};
             AttachmentReference depthReference = {0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
             RenderPass::Subpasses subpassDescription(1);
@@ -480,8 +570,10 @@ void ViewDependentState::compile(Context& context)
             subpassDescription[0].colorAttachments.emplace_back(ignoreColorReference);
             subpassDescription[0].depthStencilAttachments.emplace_back(depthReference);
 
+            // 子通道依赖（确保阴影贴图写入和读取之间的同步）
             RenderPass::Dependencies dependencies(2);
 
+            // 外部到子通道0的依赖（从片段着色器读取到早期深度测试写入）
             dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
             dependencies[0].dstSubpass = 0;
             dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -490,6 +582,7 @@ void ViewDependentState::compile(Context& context)
             dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
+            // 子通道0到外部的依赖（从深度测试写入到片段着色器读取）
             dependencies[1].srcSubpass = 0;
             dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
             dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
@@ -498,24 +591,27 @@ void ViewDependentState::compile(Context& context)
             dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
+            // 创建渲染通道
             auto renderPass = RenderPass::create(context.device, attachments, subpassDescription, dependencies);
 
-            // Framebuffer
+            // 创建帧缓冲区
             auto fbuf = Framebuffer::create(renderPass, ImageViews{depthImageView}, extent.width, extent.height, 1);
 
+            // 配置渲染图
             auto rendergraph = shadowMap.renderGraph;
             rendergraph->renderArea.offset = VkOffset2D{0, 0};
             rendergraph->renderArea.extent = VkExtent2D{extent.width, extent.height};
             rendergraph->framebuffer = fbuf;
 
+            // 设置清除值（深度清除为0.0）
             rendergraph->clearValues.resize(1);
             rendergraph->clearValues[0].depthStencil = VkClearDepthStencilValue{0.0f, 0};
 
             ++layer;
         }
 
-        // use an image barrier to transition the initial shadow map array layout to VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-        // so that the whole shadow map is usable in fragment shader even when only portions of it have been set using a render to texture pass
+        // 使用图像屏障将初始阴影贴图数组布局转换为VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+        // 这样即使只有部分阴影贴图通过渲染到纹理通道设置，整个阴影贴图也可以在片段着色器中使用
         auto initLayoutBarrier = ImageMemoryBarrier::create(
             0,
             VK_ACCESS_SHADER_READ_BIT,
@@ -532,22 +628,29 @@ void ViewDependentState::compile(Context& context)
     }
 }
 
+// 清除视图相关状态数据
+// 清空所有光源列表（环境光、方向光、点光源、聚光灯）
 void ViewDependentState::clear()
 {
     //debug("ViewDependentState::clear() bufferIndex = ", bufferIndex);
 
-    // clear data
+    // 清除数据
     ambientLights.clear();
     directionalLights.clear();
     pointLights.clear();
     spotLights.clear();
 }
 
+// 遍历视图相关状态（记录遍历）
+// rt: 记录遍历对象
+// 更新光源数据，计算阴影贴图相机参数，并执行阴影贴图预渲染
+// 这是视图相关状态的核心方法，负责每帧更新光源信息和生成阴影贴图
 void ViewDependentState::traverse(RecordTraversal& rt) const
 {
     //GPU_INSTRUMENTATION_L1_NC(rt.instrumentation, *rt.getCommandBuffer(), "ViewDependentState", COLOR_RECORD_L1);
     CPU_INSTRUMENTATION_L1_NC(rt.instrumentation, "ViewDependentState", COLOR_RECORD_L1);
 
+    // 如果视图不需要记录阴影贴图，直接返回
     if ((view->features & RECORD_SHADOW_MAPS) == 0) return;
 
     // useful reference : https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps
@@ -573,6 +676,12 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
     else
         numShadowMaps = 0;
 
+    // Lambda函数：计算视锥体边界（未裁剪）
+    // n: 近平面Z值（裁剪空间）
+    // f: 远平面Z值（裁剪空间）
+    // clipToWorld: 从裁剪空间到世界空间的变换矩阵
+    // 返回: 世界空间中的边界框
+    // 将视锥体的8个角点从裁剪空间变换到世界空间
     auto computeFrustumBounds = [&](double n, double f, const dmat4& clipToWorld) -> dbox {
         dbox bounds;
         bounds.add(clipToWorld * dvec3(-1.0, -1.0, n));
@@ -587,12 +696,14 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
         return bounds;
     };
 
-    // clip against near plane
-    // Converting between homogeneous coordinates and Cartesian coordinates can turn internal line segments
-    // (the section of the line between two points) into external line segments (the line except the part
-    // between the points). In particular, this happens for ones that cross the near plane of a perspective
-    // projection. This function therefore excludes the section of the frustum on the wrong side of the near
-    // plane, sidestepping the problem, and avoiding giving infinite bounds for infinite external line segments.
+    // Lambda函数：计算视锥体边界（裁剪近平面）
+    // n: 近平面Z值（裁剪空间）
+    // f: 远平面Z值（裁剪空间）
+    // clipToWorld: 从裁剪空间到世界空间的变换矩阵
+    // 返回: 世界空间中的边界框（裁剪近平面后）
+    // 在齐次坐标和笛卡尔坐标之间转换时，内部线段（两点之间的线段部分）可能变成外部线段（线段除了两点之间的部分）。
+    // 特别是，对于穿过透视投影近平面的线段会发生这种情况。因此，此函数排除视锥体在近平面错误一侧的部分，
+    // 避免问题，并避免为无限外部线段给出无限边界。
     auto computeFrustumBoundsClipped = [&](double n, double f, const dmat4& clipToWorld) -> dbox {
         std::array<dvec4, 8> corners{{
             clipToWorld * dvec4(-1.0, -1.0, n, 1.0),
@@ -645,18 +756,20 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
 
     // info("\n\nViewDependentState::traverse(", &rt, ", ", &view, ") numShadowMaps = ", numShadowMaps);
 
-    // cache general view parameters
+    // 缓存通用视图参数
     auto projectionMatrix = view->camera->projectionMatrix->transform();
     auto viewMatrix = view->camera->viewMatrix->transform();
     auto inverse_viewMatrix = inverse(viewMatrix);
+    // 计算视图方向和上方向（在世界空间中）
     auto view_direction = normalize(dvec3(0.0, 0.0, -1.0) * (projectionMatrix * viewMatrix));
     auto view_up = normalize(dvec3(0.0, -1.0, 0.0) * (projectionMatrix * viewMatrix));
 
+    // 从投影矩阵提取近远平面距离
     auto clipToEye = inverse(projectionMatrix);
     auto n = -(clipToEye * dvec3(0.0, 0.0, 1.0)).z;
     auto f = -(clipToEye * dvec3(0.0, 0.0, 0.0)).z;
 
-    // if regions of interest have been found in the scene graph use them to clamp the near/far values.
+    // 如果场景图中找到了感兴趣区域，使用它们来限制近远平面值
     if (!rt.regionsOfInterest.empty())
     {
         dbox eyeSpaceRegionBounds;
@@ -677,10 +790,13 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
         }
     }
 
-    // set up the light data
+    // 设置光源数据
     auto light_itr = lightData->begin();
     uint32_t numLightDataChanges = 0;
 
+    // Lambda函数：分配光源数据（vec4）
+    // value: 要分配的值
+    // 如果值已更改，标记数据为脏
     auto assignLightData = [&](const vec4& value) -> void {
         if (*light_itr != value)
         {
@@ -690,6 +806,8 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
         ++light_itr;
     };
 
+    // Lambda函数：分配光源数据（4个浮点数）
+    // x, y, z, w: 要分配的4个浮点数值
     auto assignLightData4 = [&](float x, float y, float z, float w) -> void {
         vec4 value(x, y, z, w);
         if (*light_itr != value)
@@ -700,12 +818,13 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
         ++light_itr;
     };
 
+    // 首先写入光源数量（环境光、方向光、点光源、聚光灯）
     assignLightData4(static_cast<float>(ambientLights.size()),
                      static_cast<float>(directionalLights.size()),
                      static_cast<float>(pointLights.size()),
                      static_cast<float>(spotLights.size()));
 
-    // lightData requirements = vec4 * (num_ambientLights + 3 * num_directionLights + 3 * num_pointLights + 4 * num_spotLights + 4 * num_shadow_maps)
+    // 光源数据要求 = vec4 * (环境光数量 + 3 * 方向光数量 + 3 * 点光源数量 + 4 * 聚光灯数量 + 4 * 阴影贴图数量)
 
     for (const auto& entry : ambientLights)
     {
@@ -1040,23 +1159,33 @@ void ViewDependentState::traverse(RecordTraversal& rt) const
         }
     }
 
+    // 如果光源数据已更改，标记为脏
     if (numLightDataChanges > 0)
     {
         lightData->dirty();
     }
 
+    // 如果需要每帧渲染阴影贴图且存在预渲染命令图，执行预渲染
     if (requiresPerRenderShadowMaps && preRenderCommandGraph)
     {
+        // 共享或复制性能分析工具（用于线程安全）
         if (rt.instrumentation && !preRenderCommandGraph->instrumentation)
         {
             preRenderCommandGraph->instrumentation = shareOrDuplicateForThreadSafety(rt.instrumentation);
         }
 
         // info("ViewDependentState::traverse(RecordTraversal&) doing pre render command graph. shadowMapIndex = ", shadowMapIndex);
+        // 接受记录遍历，生成阴影贴图渲染命令
         preRenderCommandGraph->accept(rt);
     }
 }
 
+// 绑定描述符集到命令缓冲区
+// commandBuffer: 命令缓冲区对象
+// pipelineBindPoint: 管线绑定点（图形或计算）
+// layout: 管线布局
+// firstSet: 第一个描述符集的索引
+// 绑定视图相关状态的描述符集（包含光源数据和阴影贴图）到管线
 void ViewDependentState::bindDescriptorSets(CommandBuffer& commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet)
 {
     auto vk = descriptorSet->vk(commandBuffer.deviceID);
