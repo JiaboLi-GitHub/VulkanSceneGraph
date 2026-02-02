@@ -152,56 +152,82 @@ bool Viewer::pollEvents(bool discardPreviousEvents)
     return result;
 }
 
+/**
+ * @brief 推进到下一帧的核心方法
+ * @param simulationTime 模拟时间（传入UseTimeSinceStartPoint则自动计算从启动到当前的时间）
+ * @return bool 推进成功返回true，失败（如窗口关闭、非活跃状态）返回false
+ * 
+ * 该函数是Viewer帧循环的核心，主要职责：
+ * 1. 完成上一帧的性能分析收尾
+ * 2. 检查Viewer活跃状态并处理窗口事件
+ * 3. 获取下一帧的交换链图像（acquireNextImage）
+ * 4. 创建当前帧的时间戳（FrameStamp），记录帧号和模拟时间
+ * 5. 启动当前帧的性能分析
+ * 6. 推进所有记录提交任务到当前帧
+ * 7. 生成帧事件并返回推进结果
+ */
 bool Viewer::advanceToNextFrame(double simulationTime)
 {
+    // 定义帧级别的性能分析源位置信息：包含方法名、文件、行号、颜色等元数据
     static constexpr SourceLocation s_frame_source_location{"Viewer advanceToNextFrame", VsgFunctionName, __FILE__, __LINE__, COLOR_VIEWER, 1};
 
-    // signal to instrumentation the end of the previous frame
+    // 如果启用了性能分析且上一帧的时间戳存在，标记上一帧分析结束
     if (instrumentation && _frameStamp) instrumentation->leaveFrame(&s_frame_source_location, frameReference, *_frameStamp);
 
+    // 检查Viewer是否处于活跃状态（如窗口未关闭、未暂停），非活跃则返回false
     if (!active())
     {
         return false;
     }
 
-    // poll all the windows for events.
+    // 轮询所有窗口的事件（如鼠标、键盘、窗口大小变化等）
+    // 参数true表示强制轮询，确保所有待处理事件都被处理
     pollEvents(true);
 
+    // 获取下一帧的交换链图像（acquireNextImage），失败则返回false（如窗口最小化、交换链失效）
     if (!acquireNextFrame()) return false;
 
-    // create FrameStamp for frame
+    // 获取当前系统时间，用于创建帧时间戳
     auto time = vsg::clock::now();
+
+    // 处理第一帧的特殊初始化逻辑
     if (_firstFrame)
     {
+        // 标记第一帧已处理，后续帧进入常规逻辑
         _firstFrame = false;
 
+        // 如果传入的模拟时间为默认值（UseTimeSinceStartPoint），则初始化为0.0
         if (simulationTime == UseTimeSinceStartPoint) simulationTime = 0.0;
 
-        // first frame, initialize to frame count and indices to 0
+        // 创建第一帧的时间戳：记录当前时间、帧号0、初始模拟时间
         _frameStamp = FrameStamp::create(time, 0, simulationTime);
     }
     else
     {
-        // after first frame so increment frame count and indices
+        // 非第一帧：递增帧号并计算模拟时间
         if (simulationTime == UseTimeSinceStartPoint)
         {
+            // 自动计算从启动点到当前的时间（秒）作为模拟时间
             simulationTime = std::chrono::duration<double, std::chrono::seconds::period>(time - _start_point).count();
         }
 
+        // 创建当前帧的时间戳：当前时间、上一帧号+1、计算后的模拟时间
         _frameStamp = FrameStamp::create(time, _frameStamp->frameCount + 1, simulationTime);
     }
 
-    // signal to instrumentation the start of frame
+    // 如果启用了性能分析，标记当前帧分析开始
     if (instrumentation) instrumentation->enterFrame(&s_frame_source_location, frameReference, *_frameStamp);
 
+    // 推进所有记录提交任务到当前帧（更新任务的帧状态、命令缓冲区等）
     for (auto& task : recordAndSubmitTasks)
     {
         task->advance();
     }
 
-    // create an event for the new frame.
+    // 创建当前帧的事件并添加到事件队列，供后续处理（如场景更新、逻辑处理）
     _events.emplace_back(new FrameEvent(_frameStamp));
 
+    // 帧推进成功，返回true
     return true;
 }
 
@@ -275,128 +301,188 @@ void Viewer::handleEvents()
     }
 }
 
+/**
+ * @brief Viewer编译方法：核心资源编译与初始化
+ * @param hints 资源提示信息，用于指导资源分配、线程数等配置
+ * 
+ * 该函数完成Viewer的核心编译流程，主要职责：
+ * 1. 收集所有命令图的资源需求（Descriptor、Buffer、Image等）
+ * 2. 为每个View分配binID并创建对应的Bin对象
+ * 3. 初始化DatabasePager（处理分页LOD资源加载）
+ * 4. 创建并配置CompileManager编译Vulkan资源
+ * 5. 启动DatabasePager线程处理异步资源加载
+ */
 void Viewer::compile(ref_ptr<ResourceHints> hints)
 {
+    // L1级CPU性能分析埋点 - 标记Viewer编译过程，使用编译阶段专属颜色
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "Viewer compile", COLOR_COMPILE);
 
+    // 如果没有待处理的记录提交任务，直接返回（无资源需要编译）
     if (recordAndSubmitTasks.empty())
     {
         return;
     }
 
+    // 标记是否包含分页LOD资源（需要异步加载的LOD节点）
     bool containsPagedLOD = false;
+    // 数据库分页器：用于异步加载/卸载分页LOD资源
     ref_ptr<DatabasePager> databasePager;
 
+    /**
+     * @brief 设备资源结构体
+     * 为每个Vulkan设备存储资源收集器，用于汇总该设备的所有资源需求
+     */
     struct DeviceResources
     {
+        // 资源收集器：遍历场景图收集所有Vulkan资源需求
         CollectResourceRequirements collectResources;
     };
 
-    // find which devices are available and the resources required for them
+    // 按设备分组的资源映射表：key=Vulkan设备，value=该设备的资源收集结果
     using DeviceResourceMap = std::map<ref_ptr<vsg::Device>, DeviceResources>;
     DeviceResourceMap deviceResourceMap;
+
+    // 遍历所有记录提交任务，收集每个设备的资源需求
     for (auto& task : recordAndSubmitTasks)
     {
+        // 获取当前任务对应设备的资源收集器（不存在则自动创建）
         auto& collectResources = deviceResourceMap[task->device].collectResources;
+        // 获取资源需求结构体，用于存储收集到的所有资源信息
         auto& resourceRequirements = collectResources.requirements;
+
+        // 如果提供了资源提示，先收集提示中的资源需求
         if (hints) hints->accept(collectResources);
 
+        // 遍历任务中的所有命令图，收集命令图内的所有资源需求
         for (auto& commandGraph : task->commandGraphs)
         {
             commandGraph->accept(collectResources);
         }
 
+        // 将收集到的最小暂存缓冲区大小赋值给传输任务
+        // 暂存缓冲区用于CPU->GPU的数据传输（如顶点/索引数据上传）
         task->transferTask->minimumStagingBufferSize = resourceRequirements.minimumStagingBufferSize;
 
+        // 如果任务关联了数据库分页器且全局分页器未初始化，则复用该分页器
         if (task->databasePager && !databasePager) databasePager = task->databasePager;
     }
 
-    // allocate DescriptorPool for each Device
+    // 为每个设备分配DescriptorPool（描述符池）并汇总所有View信息
+    // Views是一个映射表：key=View指针，value=该View的bin详情（索引、排序等）
     ResourceRequirements::Views views;
     for (auto& [device, deviceResources] : deviceResourceMap)
     {
         auto& collectResources = deviceResources.collectResources;
         auto& resourceRequirements = collectResources.requirements;
 
+        // 将当前设备的View信息合并到全局View集合中
         views.insert(resourceRequirements.views.begin(), resourceRequirements.views.end());
 
+        // 标记是否存在分页LOD资源（只要有一个设备包含则全局标记为true）
         if (resourceRequirements.containsPagedLOD) containsPagedLOD = true;
     }
 
-    // assign the viewID's to each View
+    // 为每个View分配binID并创建对应的Bin对象（用于渲染排序）
     for (auto& [const_view, binDetails] : views)
     {
+        // 去除const限制以修改View的bins属性
         auto view = const_cast<View*>(const_view);
+
+        // 遍历该View需要的所有bin编号
         for (auto& binNumber : binDetails.indices)
         {
+            // 检查该bin编号是否已存在于View的bins中
             bool binNumberMatched = false;
             for (const auto& bin : view->bins)
             {
                 if (bin->binNumber == binNumber)
                 {
                     binNumberMatched = true;
+                    break;
                 }
             }
+
+            // 如果bin编号不存在，则创建新的Bin对象并添加到View
             if (!binNumberMatched)
             {
+                // 根据bin编号确定排序规则：
+                // binNumber < 0: 升序排序 | binNumber == 0: 不排序 | binNumber > 0: 降序排序
                 Bin::SortOrder sortOrder = (binNumber < 0) ? Bin::ASCENDING : ((binNumber == 0) ? Bin::NO_SORT : Bin::DESCENDING);
+                // 创建Bin对象并添加到View的bins列表
                 view->bins.push_back(Bin::create(binNumber, sortOrder));
             }
         }
     }
 
+    // 如果场景包含分页LOD资源但未初始化DatabasePager，则创建默认分页器
     if (containsPagedLOD && !databasePager)
     {
         databasePager = DatabasePager::create();
+        // 如果启用了性能分析，为分页器分配分析器
         if (instrumentation) databasePager->assignInstrumentation(instrumentation);
     }
 
-    // create the Vulkan objects
+    // 创建Vulkan对象并配置任务的分页器
     for (const auto& task : recordAndSubmitTasks)
     {
+        // 获取当前任务对应设备的资源需求
         const auto& deviceResource = deviceResourceMap[task->device];
         const auto& resourceRequirements = deviceResource.collectResources.requirements;
 
+        // 标记当前任务是否包含分页LOD资源
         bool task_containsPagedLOD = false;
 
+        // 为任务中的所有命令图设置最大插槽数（maxSlots），并检查是否包含分页LOD
         for (const auto& commandGraph : task->commandGraphs)
         {
+            // 设置命令图的最大插槽数（用于资源分配）
             commandGraph->maxSlots = resourceRequirements.maxSlots;
+            // 标记当前任务是否包含分页LOD
             if (resourceRequirements.containsPagedLOD) task_containsPagedLOD = true;
         }
 
+        // 如果当前任务包含分页LOD且未关联分页器，则分配全局分页器
         if (task_containsPagedLOD)
         {
             if (!task->databasePager) task->databasePager = databasePager;
         }
     }
 
-    // set up the CompileManager
+    // 初始化编译管理器（CompileManager）：负责编译Vulkan资源的核心管理器
     if (!compileManager)
     {
+        // 创建编译管理器，关联当前Viewer和资源提示
         compileManager = CompileManager::create(*this, hints);
+        // 如果启用了性能分析，为编译管理器分配分析器
         if (instrumentation) compileManager->assignInstrumentation(instrumentation);
     }
 
-    // assign CompileManager to DatabasePager
+    // 将编译管理器分配给DatabasePager（用于异步编译加载的资源）
     if (databasePager && !databasePager->compileManager)
     {
         databasePager->compileManager = compileManager;
     }
 
+    // 编译所有记录提交任务的资源
     for (auto& task : recordAndSubmitTasks)
     {
+        // 获取当前任务对应设备的资源需求
         auto& deviceResource = deviceResourceMap[task->device];
         auto& resourceRequirements = deviceResource.collectResources.requirements;
+
+        // 使用编译管理器编译当前任务的所有资源
         compileManager->compileTask(task, resourceRequirements);
+
+        // 为传输任务分配动态数据（如UBO、SSBO等需要频繁更新的数据）
         task->transferTask->assign(resourceRequirements.dynamicData);
     }
 
-    // start any DatabasePagers
+    // 启动所有DatabasePager的工作线程（处理异步资源加载）
     for (const auto& task : recordAndSubmitTasks)
     {
         if (task->databasePager)
         {
+            // 如果有资源提示，使用提示中指定的线程数启动；否则使用默认配置
             if (hints)
                 task->databasePager->start(hints->numDatabasePagerReadThreads);
             else
@@ -405,15 +491,28 @@ void Viewer::compile(ref_ptr<ResourceHints> hints)
     }
 }
 
+/**
+ * @brief 分配记录提交任务并设置渲染呈现逻辑
+ * @param in_commandGraphs 输入的命令图集合，包含待执行的渲染命令逻辑
+ * 
+ * 该函数是Viewer类的核心方法，主要负责：
+ * 1. 停止当前线程并清理旧任务
+ * 2. 按设备/队列族分组命令图
+ * 3. 创建RecordAndSubmitTask处理命令缓冲区录制和提交
+ * 4. 创建Presentation处理窗口呈现
+ * 5. 重新启动线程处理任务
+ */
 void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGraphs)
 {
+    // L1级CPU性能分析埋点 - 标记Viewer的任务分配与提交过程，使用指定颜色标识
     CPU_INSTRUMENTATION_L1_NC(instrumentation, "Viewer assignRecordAndSubmitTaskAndPresentation", COLOR_VIEWER);
 
-    // now remove any commandGraphs associated with window
+    // 记录当前线程状态，用于后续恢复线程
     bool needToStartThreading = _threading;
+    // 如果线程正在运行，先停止线程以确保安全清理旧任务
     if (_threading) stopThreading();
 
-    // if a DatabasePager is already assigned re-assign
+    // 查找已分配的DatabasePager（数据库分页器），用于后续复用
     ref_ptr<DatabasePager> databasePager;
     for (const auto& task : recordAndSubmitTasks)
     {
@@ -424,15 +523,21 @@ void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGr
         }
     }
 
+    // 清空旧的呈现对象和记录提交任务列表，准备创建新任务
     presentations.clear();
     recordAndSubmitTasks.clear();
 
+    /**
+     * @brief 逻辑设备队列族结构体
+     * 用于分组命令图：按设备、队列族、呈现族组合来区分不同的命令执行上下文
+     */
     struct DeviceQueueFamily
     {
-        Device* device = nullptr;
-        int queueFamily = -1;
-        int presentFamily = -1;
+        Device* device = nullptr; // Vulkan设备指针
+        int queueFamily = -1;     // 命令执行队列族索引
+        int presentFamily = -1;   // 呈现队列族索引（-1表示无呈现需求）
 
+        // 重载小于运算符，用于std::map的键排序
         bool operator<(const DeviceQueueFamily& rhs) const
         {
             if (device < rhs.device) return true;
@@ -443,12 +548,18 @@ void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGr
         }
     };
 
-    // find all the windows
+    /**
+     * @brief 查找命令图中关联的窗口对象的访问器
+     * 继承自Visitor（访问者模式），遍历命令图树结构收集所有窗口
+     */
     struct FindWindows : public Visitor
     {
-        std::set<ref_ptr<Window>> windows;
+        std::set<ref_ptr<Window>> windows; // 存储找到的唯一窗口集合
 
+        // 通用对象遍历：继续遍历对象的子节点
         void apply(Object& object) override { object.traverse(*this); }
+
+        // 命令图遍历：提取命令图关联的窗口并继续遍历子节点
         void apply(CommandGraph& cg) override
         {
             if (cg.window) windows.insert(cg.window);
@@ -456,23 +567,27 @@ void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGr
         }
     } findWindows;
 
-    // place the input CommandGraphs into separate groups associated with each device and queue family combination
+    // 按设备+队列族+呈现族组合分组命令图，确保相同执行上下文的命令图在一起处理
     std::map<DeviceQueueFamily, CommandGraphs> deviceCommandGraphsMap;
     for (auto& commandGraph : in_commandGraphs)
     {
+        // 遍历命令图收集关联的窗口
         commandGraph->accept(findWindows);
+        // 将命令图归类到对应的设备队列族分组中
         deviceCommandGraphsMap[DeviceQueueFamily{commandGraph->device.get(), commandGraph->queueFamily, commandGraph->presentFamily}].emplace_back(commandGraph);
     }
 
-    // assign the windows found in the CommandGraphs so that the Viewer can track them.
+    // 将找到的所有窗口赋值给Viewer，使Viewer能够跟踪管理这些窗口
     _windows.assign(findWindows.windows.begin(), findWindows.windows.end());
 
-    // create the required RecordAndSubmitTask and any Presentation objects that are required for each set of CommandGraphs
+    // 为每个设备队列族分组创建对应的RecordAndSubmitTask和Presentation对象
     for (auto& [deviceQueueFamily, commandGraphs] : deviceCommandGraphsMap)
     {
-        // make sure the secondary CommandGraphs appear first in the commandGraphs list so they are filled in first
-        CommandGraphs primary_commandGraphs;
-        CommandGraphs secondary_commandGraphs;
+        // 分离主/次命令图：确保次命令图（secondary）优先处理
+        // 次命令图通常用于可复用的命令序列，需要先录制再被主命令图引用
+        CommandGraphs primary_commandGraphs;   // 主命令图集合（VK_COMMAND_BUFFER_LEVEL_PRIMARY）
+        CommandGraphs secondary_commandGraphs; // 次命令图集合（VK_COMMAND_BUFFER_LEVEL_SECONDARY）
+
         for (auto& commandGraph : commandGraphs)
         {
             if (commandGraph->level() == VK_COMMAND_BUFFER_LEVEL_PRIMARY)
@@ -480,31 +595,39 @@ void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGr
             else
                 secondary_commandGraphs.emplace_back(commandGraph);
         }
+
+        // 重新组织命令图顺序：次命令图在前，主命令图在后
         if (!secondary_commandGraphs.empty())
         {
             commandGraphs = secondary_commandGraphs;
             commandGraphs.insert(commandGraphs.end(), primary_commandGraphs.begin(), primary_commandGraphs.end());
         }
 
+        // 设置命令缓冲区数量（三重缓冲），用于减少帧等待，提升渲染流畅度
         uint32_t numBuffers = 3;
 
+        // 获取当前分组对应的Vulkan设备
         auto device = deviceQueueFamily.device;
 
-        // get main queue used for RecordAndSubmitTask
+        // 获取用于录制和提交命令的主队列
         ref_ptr<Queue> mainQueue = device->getQueue(deviceQueueFamily.queueFamily);
 
-        // get presentation queue if required/supported
+        // 获取呈现队列（如果有呈现需求且支持）
         ref_ptr<Queue> presentQueue;
         if (deviceQueueFamily.presentFamily >= 0) presentQueue = device->getQueue(deviceQueueFamily.presentFamily);
 
-        // get an appropriate transfer queue
+        // 初始化传输队列为主队列，后续尝试寻找更合适的专用传输队列
         ref_ptr<Queue> transferQueue = mainQueue;
 
-        VkQueueFlags transferQueueFlags = VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT; // use VK_QUEUE_GRAPHICS_BIT to ensure we can blit images
+        // 传输队列需要的标志位：传输位 + 图形位（确保支持图像blit操作）
+        VkQueueFlags transferQueueFlags = VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT;
+        // 遍历设备所有队列，寻找符合要求的非主队列作为专用传输队列
         for (auto& queue : device->getQueues())
         {
+            // 检查队列是否包含所需的所有标志位
             if ((queue->queueFlags() & transferQueueFlags) == transferQueueFlags)
             {
+                // 优先选择非主队列，避免传输操作阻塞主渲染队列
                 if (queue != mainQueue)
                 {
                     transferQueue = queue;
@@ -513,52 +636,58 @@ void Viewer::assignRecordAndSubmitTaskAndPresentation(CommandGraphs in_commandGr
             }
         }
 
+        // 如果有呈现队列族（说明需要窗口呈现）
         if (deviceQueueFamily.presentFamily >= 0)
         {
-            // collate all the unique Windows associated with this device's commandGraphs
+            // 重新收集当前命令图分组关联的所有窗口
             findWindows.windows.clear();
             for (auto& commandGraph : commandGraphs)
             {
                 commandGraph->accept(findWindows);
             }
 
+            // 将窗口集合转换为有序容器
             Windows activeWindows(findWindows.windows.begin(), findWindows.windows.end());
 
-            // set up Submission with CommandBuffer and signals
+            // 创建记录并提交任务：管理命令缓冲区录制、提交和同步
             auto recordAndSubmitTask = vsg::RecordAndSubmitTask::create(device, numBuffers);
-            recordAndSubmitTask->commandGraphs = commandGraphs;
-            recordAndSubmitTask->databasePager = databasePager;
-            recordAndSubmitTask->windows = activeWindows;
-            recordAndSubmitTask->queue = mainQueue;
-            recordAndSubmitTasks.emplace_back(recordAndSubmitTask);
+            recordAndSubmitTask->commandGraphs = commandGraphs;     // 关联命令图
+            recordAndSubmitTask->databasePager = databasePager;     // 关联数据库分页器
+            recordAndSubmitTask->windows = activeWindows;           // 关联窗口
+            recordAndSubmitTask->queue = mainQueue;                 // 设置主执行队列
+            recordAndSubmitTasks.emplace_back(recordAndSubmitTask); // 添加到任务列表
 
+            // 为传输任务设置专用传输队列
             recordAndSubmitTask->transferTask->transferQueue = transferQueue;
 
-            // assign instrumentation
+            // 如果启用了性能分析，为任务分配分析器
             if (instrumentation) recordAndSubmitTask->assignInstrumentation(instrumentation);
 
+            // 创建呈现对象：管理窗口的交换链和图像呈现
             auto presentation = vsg::Presentation::create();
-            presentation->windows = activeWindows;
-            presentation->queue = device->getQueue(deviceQueueFamily.presentFamily);
-            presentations.emplace_back(presentation);
+            presentation->windows = activeWindows;                                   // 关联窗口
+            presentation->queue = device->getQueue(deviceQueueFamily.presentFamily); // 设置呈现队列
+            presentations.emplace_back(presentation);                                // 添加到呈现列表
         }
         else
         {
-            // we don't have a presentFamily so this set of commandGraphs aren't associated with a window
-            // set up Submission with CommandBuffer and signals
+            // 无呈现队列族（说明是后台渲染/计算任务，无窗口输出）
+            // 创建记录并提交任务（仅处理命令执行，无呈现逻辑）
             auto recordAndSubmitTask = vsg::RecordAndSubmitTask::create(device, numBuffers);
-            recordAndSubmitTask->commandGraphs = commandGraphs;
-            recordAndSubmitTask->databasePager = databasePager;
-            recordAndSubmitTask->queue = mainQueue;
-            recordAndSubmitTasks.emplace_back(recordAndSubmitTask);
+            recordAndSubmitTask->commandGraphs = commandGraphs;     // 关联命令图
+            recordAndSubmitTask->databasePager = databasePager;     // 关联数据库分页器
+            recordAndSubmitTask->queue = mainQueue;                 // 设置主执行队列
+            recordAndSubmitTasks.emplace_back(recordAndSubmitTask); // 添加到任务列表
 
+            // 为传输任务设置专用传输队列
             recordAndSubmitTask->transferTask->transferQueue = transferQueue;
 
-            // assign instrumentation
+            // 如果启用了性能分析，为任务分配分析器
             if (instrumentation) recordAndSubmitTask->assignInstrumentation(instrumentation);
         }
     }
 
+    // 如果之前线程是运行状态，重新设置并启动线程处理新任务
     if (needToStartThreading) setupThreading();
 }
 
